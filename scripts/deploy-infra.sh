@@ -55,16 +55,32 @@ sha="$1"
 path="$2"
 
 cd "$path"
-test -f .env
-test -d .git
+if [[ ! -f .env ]]; then
+  echo 'Dev deployment is missing its private .env file.' >&2
+  exit 1
+fi
+if [[ ! -d .git ]]; then
+  echo 'Dev deployment directory is not an infra Git checkout.' >&2
+  exit 1
+fi
+if ! git remote get-url origin >/dev/null 2>&1; then
+  echo 'Dev infra checkout has no origin remote.' >&2
+  exit 1
+fi
 env_checksum_before="$(sha256sum .env)"
 
 # Fetching a commit object does not alter the running Compose project.  The
 # worktree preflight validates the exact revision using the private server env
 # before the live checkout is changed.
 git fetch --no-tags origin refs/heads/develop:refs/remotes/origin/develop
-git cat-file -e "${sha}^{commit}"
-git merge-base --is-ancestor "$sha" origin/develop
+if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+  echo 'Requested infra commit is not available on the Dev host.' >&2
+  exit 1
+fi
+if ! git merge-base --is-ancestor "$sha" origin/develop; then
+  echo 'Requested infra commit is not reachable from origin/develop.' >&2
+  exit 1
+fi
 resolved_sha="$(git rev-parse "${sha}^{commit}")"
 [[ "$resolved_sha" == "$sha" ]] || { echo 'Remote infra SHA cannot be resolved.' >&2; exit 1; }
 

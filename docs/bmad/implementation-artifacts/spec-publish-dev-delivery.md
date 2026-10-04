@@ -70,6 +70,7 @@ context:
 - Обновлён `deploy-service.sh`: web получает healthcheck по HTTP `/`, backend — actuator; общий lock и single-service deployment сохранены.
 - Добавлены stubbed delivery checks для всех трёх сервисов и отказа на неизвестном имени. `./scripts/validate.sh` и actionlint четырёх workflow прошли; web typecheck и production build прошли.
 - Три сервисных workflow теперь явно клонируют infra `develop`, а web игнорирует `*.tsbuildinfo`. Публикация и фактические Dev checks ещё ожидают push.
+- Push `4130bac9b4f86809e34b587071f52d1ee2189eb2`: infra verify прошёл; Dev deploy завершился на удалённом preflight без диагностического сообщения. Добавлены безопасные сообщения для недостающих checkout prerequisites; следующий run должен pinpoint-ить блокер.
 
 ## Spec Change Log
 
