@@ -2,9 +2,10 @@
 title: 'Автоматическая Dev-доставка инфраструктуры'
 type: 'feature'
 created: '2026-10-04'
-status: 'ready-for-dev'
+status: 'done'
 route: 'dispatch'
 review_loop_iteration: 0
+baseline_commit: 'f5f0e7b6519a01233ab503f88e078cd7e239bc00'
 context:
   - 'fkit-bi-infra/docs/bmad/project-context.md'
   - 'fkit-bi-infra/fkit-bi-bootstrap-prompt.md'
@@ -51,11 +52,11 @@ context:
 
 **Execution:**
 
-- [ ] `fkit-bi-infra/scripts/deploy-infra.sh` -- реализовать SSH-доставку точного infra SHA с preflight, блокировкой, сохранением `.env` и проверкой Compose.
-- [ ] `fkit-bi-infra/.github/workflows/ci.yml` -- после успешного verify запускать infra delivery только для push в `develop`; для disabled deploy писать summary, для включённого — валидировать settings до сервера.
-- [ ] `fkit-bi-infra/scripts/validate.sh` и CI -- проверять shell, Compose и все workflow YAML/action semantics доступным pinned инструментом.
-- [ ] `fkit-bi-infra/scripts/bootstrap-dev.sh` и `scripts/healthcheck.sh` -- запускать текущий web/proxy и подтверждать public `/` и оба API healthchecks.
-- [ ] `fkit-bi-infra/docs/dev-deployment.md` и `docs/bmad/project-context.md` -- зафиксировать команды, SHA, границы ответственности и подтверждённый status bootstrap.
+- [x] `fkit-bi-infra/scripts/deploy-infra.sh` -- реализовать SSH-доставку точного infra SHA с preflight, блокировкой, сохранением `.env` и проверкой Compose.
+- [x] `fkit-bi-infra/.github/workflows/ci.yml` -- после успешного verify запускать infra delivery только для push в `develop`; для disabled deploy писать summary, для включённого — валидировать settings до сервера.
+- [x] `fkit-bi-infra/scripts/validate.sh` и CI -- проверять shell, Compose и все workflow YAML/action semantics доступным pinned инструментом.
+- [x] `fkit-bi-infra/scripts/bootstrap-dev.sh` и `scripts/healthcheck.sh` -- запускать текущий web/proxy и подтверждать public `/` и оба API healthchecks.
+- [x] `fkit-bi-infra/docs/dev-deployment.md` и `docs/bmad/project-context.md` -- зафиксировать команды, SHA, границы ответственности и подтверждённый status bootstrap.
 
 **Acceptance Criteria:**
 
@@ -72,6 +73,21 @@ context:
 ## Spec Change Log
 
 ## Review Triage Log
+
+| Finding | Verdict | Evidence |
+| --- | --- | --- |
+| Blind: quoting of deploy path | medium | Подтверждено: абсолютный путь мог содержать одинарную кавычку в remote command. Исправлено allowlist-проверкой пути и покрыто тестом. |
+| Blind: unbounded curl | medium | Подтверждено: `curl` мог зависнуть до перехода к retry. Исправлено `--connect-timeout` и `--max-time`; retry и exhaustion проверены. |
+| Blind: unbounded SSH | medium | Подтверждено: black-hole SSH не имел собственного лимита. Добавлены `ConnectTimeout`, одна попытка и keepalive. |
+| Blind: nginx до live checkout | medium | Подтверждено: Compose не читает nginx-конфигурацию. Временный worktree теперь проходит `nginx -t` с pinned образом без pull до checkout. |
+| Blind: rollback после внешнего healthcheck | low | Факт смены checkout до внешнего healthcheck верен, но frozen acceptance требует fail без удаления данных/секретов, а не rollback; атомарная стратегия требует нового решения о восстановлении контейнеров и web, поэтому не добавлена. |
+| Blind: отсутствие remote contract test | medium | Подтверждено. Добавлен stubbed SSH-path test: exact SHA, `.env`, nginx preflight, no-pull и `--no-recreate web`. |
+| Edge: stalled endpoint | medium | Дубликат bounded-curl finding; исправление и тест указаны выше. |
+| Edge: quoted deploy path | medium | Дубликат path-injection finding; исправление и тест указаны выше. |
+| Edge: proxy image pull in bootstrap | false | Bootstrap намеренно не обязан обновлять proxy: infra delivery запрещено pull сервисных образов, а proxy использует pinned runtime image; утверждение о «published current proxy» не следует из runtime contract. |
+| Verification: remote path coverage | medium | Подтверждено и исправлено успешным полностью stubbed SSH-path test. |
+| Verification: bootstrap coverage | medium | Подтверждено и исправлено stubbed bootstrap test, который проверяет запуск всех пяти сервисов. |
+| Verification: health retry coverage | medium | Подтверждено и исправлено детерминированными тестами transient success и 24 неудачных попыток. |
 
 ## Design Notes
 

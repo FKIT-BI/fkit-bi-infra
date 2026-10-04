@@ -10,3 +10,37 @@ jobs:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y shellcheck
       - run: ./scripts/validate.sh
+  deliver-dev:
+    name: Deliver infra to Dev
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: fkit-bi-infra-dev-delivery
+      cancel-in-progress: false
+    env:
+      FKIT_BI_DEV_DEPLOY_ENABLED: ${{ vars.FKIT_BI_DEV_DEPLOY_ENABLED }}
+      FKIT_BI_DEV_HOST: ${{ vars.FKIT_BI_DEV_HOST }}
+      FKIT_BI_DEV_SSH_USER: ${{ vars.FKIT_BI_DEV_SSH_USER }}
+      FKIT_BI_DEV_SSH_PORT: ${{ vars.FKIT_BI_DEV_SSH_PORT }}
+      FKIT_BI_DEV_DEPLOY_PATH: ${{ vars.FKIT_BI_DEV_DEPLOY_PATH }}
+      FKIT_BI_DEV_PUBLIC_URL: ${{ vars.FKIT_BI_DEV_PUBLIC_URL }}
+      FKIT_BI_DEV_SSH_KNOWN_HOSTS: ${{ vars.FKIT_BI_DEV_SSH_KNOWN_HOSTS }}
+      FKIT_BI_DEV_SSH_PRIVATE_KEY: ${{ secrets.FKIT_BI_DEV_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report disabled delivery
+        if: env.FKIT_BI_DEV_DEPLOY_ENABLED != 'true'
+        run: echo 'Dev infra delivery is disabled (FKIT_BI_DEV_DEPLOY_ENABLED is not true).' >> "$GITHUB_STEP_SUMMARY"
+      - name: Preflight and deliver exact SHA
+        if: env.FKIT_BI_DEV_DEPLOY_ENABLED == 'true'
+        run: ./scripts/deploy-infra.sh "$GITHUB_SHA"
+      - name: Publish delivery result
+        if: env.FKIT_BI_DEV_DEPLOY_ENABLED == 'true' && success()
+        run: |
+          {
+            echo '## Dev infra delivery'
+            echo
+            echo "- Infra SHA: \`$GITHUB_SHA\`"
+            echo '- Result: healthchecks passed'
+          } >> "$GITHUB_STEP_SUMMARY"

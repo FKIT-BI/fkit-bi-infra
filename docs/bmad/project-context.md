@@ -6,4 +6,8 @@ Read `../architecture/fkit-bi-architecture.md` and `../architecture/fkit-bi-comp
 
 ## BOOTSTRAP-001
 
-Status: in progress. Repository skeletons, BMAD 6.12.0, CI and initial Dev delivery.
+Status: in progress. Репозитории и BMAD 6.12.0 подготовлены; BOOTSTRAP-001
+может быть завершён только после подтверждённых GitHub CI и фактической Dev
+delivery exact infra SHA с public и API healthchecks. Infra delivery использует
+`develop`, host-wide lock и не меняет private `.env`, volume или сервисные image
+references.
