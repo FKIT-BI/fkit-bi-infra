@@ -70,7 +70,9 @@ context:
 - Обновлён `deploy-service.sh`: web получает healthcheck по HTTP `/`, backend — actuator; общий lock и single-service deployment сохранены.
 - Добавлены stubbed delivery checks для всех трёх сервисов и отказа на неизвестном имени. `./scripts/validate.sh` и actionlint четырёх workflow прошли; web typecheck и production build прошли.
 - Три сервисных workflow теперь явно клонируют infra `develop`, а web игнорирует `*.tsbuildinfo`. Публикация и фактические Dev checks ещё ожидают push.
-- Push `4130bac9b4f86809e34b587071f52d1ee2189eb2`: infra verify прошёл; Dev deploy завершился на удалённом preflight без диагностического сообщения. Добавлены безопасные сообщения для недостающих checkout prerequisites; следующий run должен pinpoint-ить блокер.
+- Push `4130bac9b4f86809e34b587071f52d1ee2189eb2`: infra verify прошёл; Dev deploy завершился на удалённом preflight без диагностического сообщения. Безопасная диагностика подтвердила, что `/opt/fkit-bi` не был Git checkout.
+- Infra delivery теперь передаёт runner-собранный Git bundle и инициализирует metadata рядом с существующим `.env`, не требуя GitHub credentials на сервере. `deliver-dev` получает полную историю `develop` для проверки SHA; локальные stubbed checks прошли.
+- Web commit `b7d3ac87887dc671c200a49bf5a71b29376f47d5` прошёл verify, GHCR publish и Dev service deployment в run `37221632140`.
 
 ## Spec Change Log
 

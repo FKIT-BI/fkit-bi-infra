@@ -137,29 +137,25 @@ grep -F "Dev infra delivery is disabled" .github/workflows/ci.yml >/dev/null
 # A successful delivery is executed entirely through stubs.  This exercises
 # the remote heredoc and proves its exact-SHA, private-.env and no-pull/web
 # recreation contract without connecting to Dev.
-test_sha='f5f0e7b6519a01233ab503f88e078cd7e239bc00'
+test_sha="$(git rev-parse refs/remotes/origin/develop)"
 server_dir="$temporary_dir/server"
-mkdir -p "$server_dir/.git"
+mkdir -p "$server_dir"
 printf '%s\n' 'PRIVATE_VALUE=unchanged' > "$server_dir/.env"
 env_before="$(sha256sum "$server_dir/.env")"
 delivery_log="$temporary_dir/delivery.log"
 
-cat > "$temporary_dir/bin/git" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-printf 'git %s\n' "$*" >> "$FKIT_BI_TEST_DELIVERY_LOG"
-if [[ "${1:-}" == '-C' ]]; then shift 2; fi
-case "${1:-}" in
-  rev-parse) printf '%s\n' "$FKIT_BI_TEST_SHA" ;;
-  worktree)
-    if [[ "${2:-}" == add ]]; then mkdir -p "${4:?}/nginx"; fi
-    ;;
-esac
-EOF
 cat > "$temporary_dir/bin/docker" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'docker %s\n' "$*" >> "$FKIT_BI_TEST_DELIVERY_LOG"
+EOF
+cat > "$temporary_dir/bin/scp" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+remote_target="${!#}"
+remote_path="${remote_target#*:}"
+source_file="${@: -2:1}"
+cp "$source_file" "$remote_path"
 EOF
 cat > "$temporary_dir/bin/ssh" <<'EOF'
 #!/usr/bin/env bash
@@ -167,18 +163,18 @@ set -euo pipefail
 printf 'ssh %s\n' "$*" >> "$FKIT_BI_TEST_DELIVERY_LOG"
 # Arguments are validated by deploy-infra.sh; execute the literal remote body
 # with the test's known safe values rather than parsing a shell command string.
-bash -s -- "$FKIT_BI_TEST_SHA" "$FKIT_BI_TEST_SERVER_DIR"
+remote_command="${!#}"
+bash -c "$remote_command"
 EOF
 cat > "$temporary_dir/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
-chmod +x "$temporary_dir/bin/git" "$temporary_dir/bin/docker" \
+chmod +x "$temporary_dir/bin/scp" "$temporary_dir/bin/docker" \
   "$temporary_dir/bin/ssh" "$temporary_dir/bin/curl"
 
 env \
   PATH="$temporary_dir/bin:$PATH" \
-  FKIT_BI_TEST_SHA="$test_sha" \
   FKIT_BI_TEST_SERVER_DIR="$server_dir" \
   FKIT_BI_TEST_DELIVERY_LOG="$delivery_log" \
   FKIT_BI_DEV_HOST=dev.example.test \
@@ -191,7 +187,8 @@ env \
   ./scripts/deploy-infra.sh "$test_sha" >/dev/null
 
 [[ "$(sha256sum "$server_dir/.env")" == "$env_before" ]]
-grep -F "git checkout --detach $test_sha" "$delivery_log" >/dev/null
+[[ "$(git -C "$server_dir" rev-parse HEAD)" == "$test_sha" ]]
+grep -Fx "$test_sha" "$server_dir/.fkit-bi-infra-sha" >/dev/null
 grep -F 'docker run --rm --pull never' "$delivery_log" >/dev/null
 grep -F 'nginx:1.27-alpine nginx -t' "$delivery_log" >/dev/null
 grep -F 'docker compose up -d --no-build --pull never --no-recreate web' "$delivery_log" >/dev/null

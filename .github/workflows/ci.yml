@@ -8,6 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - run: sudo apt-get update && sudo apt-get install -y shellcheck
       - run: ./scripts/validate.sh
   deliver-dev:
@@ -29,6 +31,8 @@ jobs:
       FKIT_BI_DEV_SSH_PRIVATE_KEY: ${{ secrets.FKIT_BI_DEV_SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Report disabled delivery
         if: env.FKIT_BI_DEV_DEPLOY_ENABLED != 'true'
         run: echo 'Dev infra delivery is disabled (FKIT_BI_DEV_DEPLOY_ENABLED is not true).' >> "$GITHUB_STEP_SUMMARY"

@@ -14,10 +14,12 @@ web — запросом к `/` на порту 80. Сервисный workflow 
 
 `scripts/deploy-infra.sh <sha>` использует strict host-key checking, временный
 ключ с режимом `0600` и общую серверную блокировку
-`/tmp/fkit-bi-deploy.lock`. На сервере commit сначала проверяется во временном
-git worktree вместе с private `.env`, затем основной checkout переводится в
-detached exact SHA. Скрипт не собирает и не скачивает образы, не меняет `.env`
-или его image references, не пересоздаёт `web`; он запускает текущие сервисы и
+`/tmp/fkit-bi-deploy.lock`. Runner передаёт проверенный Git bundle, поэтому Dev
+серверу не нужны GitHub credentials. Скрипт проверяет commit во временном git
+worktree вместе с private `.env`, затем переводит основной checkout на detached
+exact SHA; на первом запуске Git metadata создаются в существующем каталоге без
+замены `.env` и Docker volume. Скрипт не собирает и не скачивает образы, не меняет
+image references, не пересоздаёт `web`; он запускает текущие сервисы и
 пересоздаёт только proxy для применения nginx. В завершение из runner проверяются
 `/`, `/api/analytics/actuator/health` и `/api/generator/actuator/health`.
 
