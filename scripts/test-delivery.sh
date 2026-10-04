@@ -193,6 +193,7 @@ env \
 [[ "$(git -C "$server_dir" rev-parse HEAD)" == "$test_sha" ]]
 grep -Fx "$test_sha" "$server_dir/.fkit-bi-infra-sha" >/dev/null
 grep -F 'docker run --rm' "$delivery_log" >/dev/null
+grep -F -- '--add-host analytics:127.0.0.1 --add-host generator:127.0.0.1' "$delivery_log" >/dev/null
 grep -F 'nginx:1.27-alpine nginx -t' "$delivery_log" >/dev/null
 grep -F 'docker compose pull proxy' "$delivery_log" >/dev/null
 grep -F 'docker compose up -d --no-build --pull never --no-recreate web' "$delivery_log" >/dev/null

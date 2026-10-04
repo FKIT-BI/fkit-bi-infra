@@ -32,6 +32,7 @@ resolved_sha="$(git -C "$root" rev-parse "${sha}^{commit}")"
 [[ "$resolved_sha" == "$sha" ]] || { echo 'Infra SHA is not canonical.' >&2; exit 2; }
 docker compose --project-directory "$root" --env-file "$root/.env.example" config --quiet
 docker run --rm \
+  --add-host analytics:127.0.0.1 --add-host generator:127.0.0.1 \
   -v "$root/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro" \
   nginx:1.27-alpine nginx -t
 
