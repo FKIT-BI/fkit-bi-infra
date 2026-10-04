@@ -2,7 +2,7 @@
 title: 'Автоматическая Dev-доставка инфраструктуры'
 type: 'feature'
 created: '2026-10-04'
-status: 'draft'
+status: 'ready-for-dev'
 route: 'dispatch'
 review_loop_iteration: 0
 context:
@@ -24,7 +24,7 @@ context:
 
 **Never:** Не выполнять миграции вне analytics, не пересобирать и не публиковать образы приложений из infra, не применять `docker compose down -v`, не отменять активную доставку и не менять web-контейнер без утверждённого решения.
 
-**Decision:** Infra delivery запускает proxy и текущий опубликованный `web:dev`, затем требует успешные public `/`, analytics и generator healthchecks. Продуктовые изменения web остаются за другим разработчиком; CI/CD и Dev-доставка web входят в этот bootstrap scope.
+**Decision:** Infra delivery запускает proxy и текущий опубликованный `web:dev`, затем требует успешные public `/`, analytics и generator healthchecks. Любой разработчик может вносить изменения в любой компонент в рамках задачи; CI/CD и Dev-доставка web входят в этот bootstrap scope.
 
 ## I/O & Edge-Case Matrix
 
@@ -67,7 +67,7 @@ context:
 
 ## Implementation Notes
 
-- 2026-10-04: analytics SHA `181220860bd282368f2bab80f214d5adf8276fd3` и generator SHA `7806f46c2c69c10158bd947409d7c08052e03c16` успешно доставлены и healthy на Dev. Web image опубликован, но его delivery намеренно не выполняется в этом scope.
+- 2026-10-04: analytics SHA `181220860bd282368f2bab80f214d5adf8276fd3` и generator SHA `7806f46c2c69c10158bd947409d7c08052e03c16` успешно доставлены и healthy на Dev. Web image опубликован; его delivery входит в текущий scope.
 
 ## Spec Change Log
 
