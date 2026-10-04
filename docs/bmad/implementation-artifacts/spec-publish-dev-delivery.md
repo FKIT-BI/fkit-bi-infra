@@ -2,7 +2,7 @@
 title: 'Опубликовать delivery-контур и подготовить Dev-стенд'
 type: 'feature'
 created: '2026-10-04'
-status: 'in-progress'
+status: 'in-review'
 route: 'dispatch'
 review_loop_iteration: 0
 baseline_commit: 'de21b806e39f34bbbfc0527ebb054cc563c3243a'
@@ -38,14 +38,14 @@ context:
 
 ## Code Map
 
-- `fkit-bi-infra/.github/workflows/ci.yml` -- локальный commit `de21b80` добавляет post-verify Dev delivery на push в `develop`; после push это единственный путь доставки exact infra SHA.
-- `fkit-bi-infra/scripts/deploy-infra.sh` -- безопасно применяет infra SHA на сервере, не меняя image references; его public healthcheck является доказательством готовности стенда.
-- `fkit-bi-infra/scripts/deploy-service.sh` -- общий сервисный SSH delivery; сейчас проверяет fixed backend endpoint, поэтому требует выбора healthcheck по `analytics|generator|web`.
+- `fkit-bi-infra/.github/workflows/ci.yml` -- post-verify Dev delivery на push в `develop`; checkout получает полную историю для формирования локального Git bundle.
+- `fkit-bi-infra/scripts/deploy-infra.sh` -- передаёт проверенный bundle, делает exact-SHA checkout, сохраняет `.env`, валидирует Compose и выполняет внешние public healthchecks.
+- `fkit-bi-infra/scripts/deploy-service.sh` -- общий сервисный SSH delivery; выбирает nginx `/` для web и actuator для backend.
 - `fkit-bi-infra/compose.yaml` -- web использует nginx на 80, analytics и generator слушают 8080; сохраняет runtime-contract и private `.env`.
 - `fkit-bi-web/Dockerfile` -- подтверждает HTTP healthcheck web на `http://localhost/`, а не actuator.
 - `fkit-bi-{analytics,generator,web}/.github/workflows/ci.yml` -- единый путь verify → GHCR (`:dev`, `:SHA`) → условный deploy для push в `develop`; общий infra deploy-скрипт нужно получать из `develop`, поскольку service delivery меняется вместе с ним.
 - `fkit-bi-web/.gitignore` -- должен исключать `*.tsbuildinfo`, чтобы generated TypeScript metadata не блокировала следующие commits.
-- `fkit-bi-infra/scripts/test-delivery.sh` -- contract tests infra delivery; дополнить проверками endpoint-выбора service delivery.
+- `fkit-bi-infra/scripts/test-delivery.sh` -- contract tests для bundle bootstrap, сохранения `.env`, только выбранного сервиса и правильного health endpoint.
 - `fkit-bi-infra/docs/dev-deployment.md` и `docs/bmad/project-context.md` -- операторский контракт и итоговый статус BOOTSTRAP-001 после evidence от GitHub и Dev.
 
 ## Tasks & Acceptance
@@ -54,9 +54,11 @@ context:
 
 - [x] `fkit-bi-infra/scripts/deploy-service.sh` -- выбирать internal health URL по сервису (`/actuator/health` для backend, `/` для web) и сохранить current SSH/lock/single-service semantics.
 - [x] `fkit-bi-infra/scripts/test-delivery.sh` -- покрыть service delivery endpoint и отказ до изменения сервера при неверном service input.
+- [x] `fkit-bi-infra/scripts/deploy-infra.sh` и `.github/workflows/ci.yml` -- доставлять точный SHA через Git bundle, безопасно инициализировать Git metadata на хосте, сохранять `.env` и выполнить внешний readiness check.
 - [x] `fkit-bi-web/.gitignore` -- добавить generated TypeScript build info; не добавлять artifact в Git.
-- [ ] `fkit-bi-infra/docs/dev-deployment.md` и `docs/bmad/project-context.md` -- зафиксировать фактическую последовательность delivery, SHAs/runs и подтверждённую либо неподтверждённую readiness.
-- [ ] все изменённые Git-репозитории -- выполнить пропорциональные проверки, создать осмысленные commits и push `develop`; дождаться соответствующих Actions.
+- [x] `fkit-bi-{analytics,generator,web}/.github/workflows/ci.yml` -- явно брать общий deploy script из infra `develop`.
+- [x] `fkit-bi-infra/docs/dev-deployment.md` и `docs/bmad/project-context.md` -- записать актуальные delivery run IDs, SHA и подтверждённую readiness.
+- [x] все изменённые Git-репозитории -- выполнить проверки, создать commits и push `develop`; Actions завершились успешно.
 
 **Acceptance Criteria:**
 
@@ -75,6 +77,10 @@ context:
 - Web commit `b7d3ac87887dc671c200a49bf5a71b29376f47d5` прошёл verify, GHCR publish и Dev service deployment в run `37221632140`.
 - Infra run `37221722491` подтвердил, что у Dev отсутствует локальный `nginx:1.27-alpine`. `nginx -t` перенесён в runner preflight; сервер загрузит только фиксированный proxy-образ при его отсутствии, сохраняя образы приложений без изменений.
 - Infra run `37221844148`: runner `nginx -t` должен резолвить имена upstream для синтаксической проверки, хотя API-сервисы на runner не запущены. Добавлены локальные host aliases к loopback только для этой проверки.
+- Актуальные успешные delivery: infra `f08d8eb8004538f70e7b4c04fbfb553a0d02a287` (run `37221910438`), analytics `676eeec8f3d90e8ec52bfbe62e9243c8070fd52f` (run `37222329237`), generator `fb30e77daddd4bffc4e6cfed3a0e3fa84a005c82` (run `37222336099`), web `b7d3ac87887dc671c200a49bf5a71b29376f47d5` (run `37221632140`). Все локальные/remote `develop` SHA совпадают.
+- После backend delivery публичные проверки из рабочей среды вернули HTTP 200 на `/` и обоих API; analytics вернул `status: UP`, generator — `status: UP`. Web отдаёт страницу FKIT BI.
+- Уточнение политики infra delivery: GitHub runner передаёт bundle, удалённый хост инициализирует Git metadata на первом запуске; nginx config валидируется на runner с loopback alias. Dev загружает только отсутствующий fixed `nginx:1.27-alpine`, не application images.
+- Итоговое состояние после перечисленных промежуточных runs: все четыре develop CI/CD runs успешны, SHA на локальных ветках совпадали с remote перед этой финальной документационной фиксацией, а публичные HTTP-проверки всех трёх endpoints прошли после сервисных deploy.
 
 ## Spec Change Log
 
@@ -88,7 +94,7 @@ Service-level healthcheck остаётся локальным после restart
 
 **Commands:**
 
-- `fkit-bi-infra/scripts/validate.sh` -- expected: Compose, contract tests, shellcheck и actionlint проходят.
-- `./mvnw -B verify` в analytics и generator; `npm ci && npm run typecheck && npm run build` в web -- expected: сервисные CI-команды локально проходят.
-- `gh run watch <id> --repo FKIT-BI/fkit-bi-infra --exit-status` -- expected: verify и Deliver infra to Dev успешны.
-- `curl --fail --silent --show-error http://45.132.176.28:8080/` и оба API health URL -- expected: public endpoints возвращают success.
+- `fkit-bi-infra/scripts/validate.sh` и actionlint всех четырёх workflows -- passed.
+- `npm run typecheck`, `npm run build` в web -- passed; analytics/generator Maven verify и Docker build прошли в Actions.
+- Actions: [infra](https://github.com/FKIT-BI/fkit-bi-infra/actions/runs/37221910438), [analytics](https://github.com/FKIT-BI/fkit-bi-analytics/actions/runs/37222329237), [generator](https://github.com/FKIT-BI/fkit-bi-generator/actions/runs/37222336099), [web](https://github.com/FKIT-BI/fkit-bi-web/actions/runs/37221632140) -- all successful, включая публикацию и Dev delivery.
+- Внешние `curl` для `http://45.132.176.28:8080/` и обоих API health URL -- все HTTP 200; оба backend body содержат `status: UP`.

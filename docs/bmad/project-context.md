@@ -6,8 +6,11 @@ Read `../architecture/fkit-bi-architecture.md` and `../architecture/fkit-bi-comp
 
 ## BOOTSTRAP-001
 
-Status: in progress. Репозитории и BMAD 6.12.0 подготовлены; BOOTSTRAP-001
-может быть завершён только после подтверждённых GitHub CI и фактической Dev
-delivery exact infra SHA с public и API healthchecks. Infra delivery использует
-`develop`, host-wide lock и не меняет private `.env`, volume или сервисные image
-references.
+Status: complete (2026-10-04). Все четыре репозитория имеют успешные GitHub CI;
+analytics, generator и web образы опубликованы и доставлены. Infra SHA
+`f08d8eb8004538f70e7b4c04fbfb553a0d02a287` доставлен точной ревизией. Публичные
+`/`, `/api/analytics/actuator/health` и
+`/api/generator/actuator/health` проверены с HTTP 200; backend health вернул UP.
+Delivery работает через `develop` и host-wide lock, сохраняет private `.env` и
+PostgreSQL volume. Подробные run IDs и актуальные SHA записаны в
+`docs/dev-deployment.md`.
