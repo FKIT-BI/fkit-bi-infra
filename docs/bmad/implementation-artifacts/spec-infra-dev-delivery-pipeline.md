@@ -24,6 +24,8 @@ context:
 
 **Never:** Не выполнять миграции вне analytics, не пересобирать и не публиковать образы приложений из infra, не применять `docker compose down -v`, не отменять активную доставку и не менять web-контейнер без утверждённого решения.
 
+**Decision:** Infra delivery запускает proxy и текущий опубликованный `web:dev`, затем требует успешные public `/`, analytics и generator healthchecks. Продуктовые изменения web остаются за другим разработчиком; CI/CD и Dev-доставка web входят в этот bootstrap scope.
+
 ## I/O & Edge-Case Matrix
 
 | Scenario | Input / State | Expected Output / Behavior | Error Handling |
@@ -31,19 +33,15 @@ context:
 | Delivery | Push в `develop`, все Dev settings доступны | Runner проверяет infra, сервер получает точный SHA, Compose config валиден | В summary указаны SHA и результат |
 | Missing setting | Включён deploy, но отсутствует обязательный secret/variable | Сервер не изменяется | Preflight завершается ошибкой без значения секрета |
 | Invalid infra | Compose config или checkout SHA не проходит | Сервисные контейнеры и `.env` не меняются | Workflow завершается ошибкой с безопасной диагностикой |
-| Web отсутствует | Web image/container ещё готовит другой разработчик | Infra delivery применяет только безопасную базу и явно сообщает состояние public readiness | Не подменяет работу web-разработчика |
+| Web готов | Текущий `web:dev` опубликован | Infra delivery запускает web и proxy, затем проверяет `/` и оба API | При ошибке healthcheck delivery завершается ошибкой без удаления данных |
 
 </frozen-after-approval>
-
-## Open Questions
-
-- После infra-delivery запускать proxy и требовать внешний `/` healthcheck? — варианты: A) да, доставлять текущий `web:dev` и считать публичный Dev готовым (изменит web-часть, которую ведёт другой разработчик); B) нет, доставлять только infra и backend-зависимости, а внешний healthcheck выполнить после отдельной web-доставки (сохраняет границу ответственности, но Dev будет неполным до её завершения).
 
 ## Code Map
 
 - `fkit-bi-infra/.github/workflows/ci.yml` -- текущая CI-проверка; добавить post-verify Dev delivery на push в `develop` и preflight.
 - `fkit-bi-infra/scripts/deploy-service.sh` -- образец безопасного SSH, временных key/known_hosts и host-wide `flock`; не менять его контракт доставки одного сервиса.
-- `fkit-bi-infra/scripts/bootstrap-dev.sh` -- текущая первичная инициализация postgres/proxy; определить безопасное переиспользование без управления web вне утверждённого scope.
+- `fkit-bi-infra/scripts/bootstrap-dev.sh` -- текущая первичная инициализация postgres/proxy; расширить проверяемый запуск до web/proxy по утверждённому scope.
 - `fkit-bi-infra/scripts/healthcheck.sh` -- внешний контракт проверки web и двух API.
 - `fkit-bi-infra/compose.yaml` -- единственный runtime contract; `.env` и named volume сохраняются.
 - `fkit-bi-infra/docs/dev-deployment.md` -- описать фактический путь infra delivery и recovery.
@@ -56,6 +54,7 @@ context:
 - [ ] `fkit-bi-infra/scripts/deploy-infra.sh` -- реализовать SSH-доставку точного infra SHA с preflight, блокировкой, сохранением `.env` и проверкой Compose.
 - [ ] `fkit-bi-infra/.github/workflows/ci.yml` -- после успешного verify запускать infra delivery только для push в `develop`; для disabled deploy писать summary, для включённого — валидировать settings до сервера.
 - [ ] `fkit-bi-infra/scripts/validate.sh` и CI -- проверять shell, Compose и все workflow YAML/action semantics доступным pinned инструментом.
+- [ ] `fkit-bi-infra/scripts/bootstrap-dev.sh` и `scripts/healthcheck.sh` -- запускать текущий web/proxy и подтверждать public `/` и оба API healthchecks.
 - [ ] `fkit-bi-infra/docs/dev-deployment.md` и `docs/bmad/project-context.md` -- зафиксировать команды, SHA, границы ответственности и подтверждённый status bootstrap.
 
 **Acceptance Criteria:**
@@ -64,6 +63,7 @@ context:
 - Given отсутствует обязательная настройка, when delivery включена, then workflow завершается до SSH и не меняет сервер.
 - Given PR в `develop`, when CI выполняется, then проходят только проверки без доставки.
 - Given error Compose или SSH, when infra delivery не может подтвердить состояние, then workflow fails without volume deletion or secret output.
+- Given published `web:dev` and healthy backend containers, when infra delivery completes, then web и proxy are running and the public URL, `/api/analytics/actuator/health` and `/api/generator/actuator/health` return success.
 
 ## Implementation Notes
 
