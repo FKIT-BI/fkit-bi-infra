@@ -1,0 +1,12 @@
+name: Infra CI
+on:
+  pull_request: {branches: [develop]}
+  push: {branches: [develop]}
+permissions: {contents: read}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: ./scripts/validate.sh

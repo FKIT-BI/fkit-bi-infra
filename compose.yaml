@@ -1,0 +1,49 @@
+name: fkit-bi
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  analytics:
+    image: ${ANALYTICS_IMAGE}
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      FKIT_BI_GIT_SHA: ${GIT_SHA}
+    depends_on: {postgres: {condition: service_healthy}}
+    healthcheck: {test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"], interval: 10s, timeout: 3s, retries: 12}
+    restart: unless-stopped
+  generator:
+    image: ${GENERATOR_IMAGE}
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      FKIT_BI_GIT_SHA: ${GIT_SHA}
+    depends_on: {postgres: {condition: service_healthy}}
+    healthcheck: {test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"], interval: 10s, timeout: 3s, retries: 12}
+    restart: unless-stopped
+  web:
+    image: ${WEB_IMAGE}
+    depends_on:
+      analytics: {condition: service_healthy}
+      generator: {condition: service_healthy}
+    restart: unless-stopped
+  proxy:
+    image: nginx:1.27-alpine
+    ports: ["${PUBLIC_PORT}:80"]
+    volumes: [./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro]
+    depends_on: {web: {condition: service_started}}
+    restart: unless-stopped
+volumes:
+  postgres-data:
