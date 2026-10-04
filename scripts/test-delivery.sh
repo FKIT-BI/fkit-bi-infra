@@ -61,6 +61,74 @@ grep -Fx 'http://dev.example.test/' "$health_log" >/dev/null
 grep -Fx 'http://dev.example.test/api/analytics/actuator/health' "$health_log" >/dev/null
 grep -Fx 'http://dev.example.test/api/generator/actuator/health' "$health_log" >/dev/null
 
+# Service delivery chooses the health endpoint for the selected runtime.
+cat > "$temporary_dir/bin/flock" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+shift 3
+exec "$@"
+EOF
+cat > "$temporary_dir/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'docker %s\n' "$*" >> "$FKIT_BI_TEST_SERVICE_LOG"
+EOF
+cat > "$temporary_dir/bin/ssh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+remote_command="${!#}"
+bash -c "$remote_command"
+EOF
+chmod +x "$temporary_dir/bin/flock" "$temporary_dir/bin/docker" "$temporary_dir/bin/ssh"
+
+run_service_delivery() {
+  local service="$1" expected_health="$2"
+  local deployment_dir="$temporary_dir/service-$service"
+  local service_log="$temporary_dir/service-$service.log"
+  mkdir -p "$deployment_dir"
+  printf '%s\n' \
+    'ANALYTICS_IMAGE=old-analytics' \
+    'GENERATOR_IMAGE=old-generator' \
+    'WEB_IMAGE=old-web' \
+    'GIT_SHA=old-sha' > "$deployment_dir/.env"
+  FKIT_BI_TEST_SERVICE_LOG="$service_log" \
+    FKIT_BI_DEV_HOST=dev.example.test \
+    FKIT_BI_DEV_SSH_USER=deployer \
+    FKIT_BI_DEV_SSH_PORT=22 \
+    FKIT_BI_DEV_DEPLOY_PATH="$deployment_dir" \
+    FKIT_BI_DEV_SSH_KNOWN_HOSTS='dev.example.test ssh-ed25519 AAAA' \
+    FKIT_BI_DEV_SSH_PRIVATE_KEY='test private key' \
+    PATH="$temporary_dir/bin:$PATH" \
+  ./scripts/deploy-service.sh "$service" "image-$service" test-sha >/dev/null
+  grep -F "wget -qO- $expected_health" "$service_log" >/dev/null
+  grep -Fx "GIT_SHA=test-sha" "$deployment_dir/.env" >/dev/null
+  grep -Fx "$(tr '[:lower:]' '[:upper:]' <<< "$service")_IMAGE=image-$service" "$deployment_dir/.env" >/dev/null
+  if [[ "$service" != web ]]; then
+    grep -Fx 'WEB_IMAGE=old-web' "$deployment_dir/.env" >/dev/null
+  fi
+  if [[ "$service" != analytics ]]; then
+    grep -Fx 'ANALYTICS_IMAGE=old-analytics' "$deployment_dir/.env" >/dev/null
+  fi
+  if [[ "$service" != generator ]]; then
+    grep -Fx 'GENERATOR_IMAGE=old-generator' "$deployment_dir/.env" >/dev/null
+  fi
+}
+
+run_service_delivery analytics 'http://localhost:8080/actuator/health'
+run_service_delivery generator 'http://localhost:8080/actuator/health'
+run_service_delivery web 'http://localhost/'
+
+# Invalid service names are rejected before SSH is invoked.
+expect_failure 'Unsupported service.' env \
+  FKIT_BI_DEV_HOST=dev.example.test \
+  FKIT_BI_DEV_SSH_USER=deployer \
+  FKIT_BI_DEV_SSH_PORT=22 \
+  FKIT_BI_DEV_DEPLOY_PATH="$temporary_dir/service-invalid" \
+  FKIT_BI_DEV_SSH_KNOWN_HOSTS='dev.example.test ssh-ed25519 AAAA' \
+  FKIT_BI_DEV_SSH_PRIVATE_KEY='test private key' \
+  PATH="$temporary_dir/bin:$PATH" \
+  ./scripts/deploy-service.sh invalid image sha
+
 # CI не доставляет из PR и сообщает выключенное состояние в summary.
 grep -F "if: github.event_name == 'push' && github.ref == 'refs/heads/develop'" \
   .github/workflows/ci.yml >/dev/null
