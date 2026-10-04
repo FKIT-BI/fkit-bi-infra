@@ -11,6 +11,7 @@ printf '%s\n' "$FKIT_BI_DEV_SSH_PRIVATE_KEY" > "$key"; chmod 600 "$key"
 printf '%s\n' "$FKIT_BI_DEV_SSH_KNOWN_HOSTS" > "$known_hosts"
 opts=(-i "$key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts" -p "$FKIT_BI_DEV_SSH_PORT")
 remote="$FKIT_BI_DEV_SSH_USER@$FKIT_BI_DEV_HOST"
+# shellcheck disable=SC2029 # arguments deliberately expand locally; heredoc remains literal.
 ssh "${opts[@]}" "$remote" "flock -w 300 /tmp/fkit-bi-deploy.lock bash -s -- '$service' '$image' '$sha' '$FKIT_BI_DEV_DEPLOY_PATH'" <<'REMOTE'
 set -euo pipefail
 service="$1"; image="$2"; sha="$3"; path="$4"
