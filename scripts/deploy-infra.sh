@@ -31,6 +31,9 @@ git -C "$root" cat-file -e "${sha}^{commit}"
 resolved_sha="$(git -C "$root" rev-parse "${sha}^{commit}")"
 [[ "$resolved_sha" == "$sha" ]] || { echo 'Infra SHA is not canonical.' >&2; exit 2; }
 docker compose --project-directory "$root" --env-file "$root/.env.example" config --quiet
+docker run --rm \
+  -v "$root/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro" \
+  nginx:1.27-alpine nginx -t
 
 key="$(mktemp)"
 known_hosts="$(mktemp)"
@@ -108,9 +111,6 @@ preflight_dir="$(mktemp -d)"
 git worktree add --detach "$preflight_dir" "$sha" >/dev/null
 cp .env "$preflight_dir/.env"
 docker compose --project-directory "$preflight_dir" --env-file "$preflight_dir/.env" config --quiet
-docker run --rm --pull never \
-  -v "$preflight_dir/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro" \
-  nginx:1.27-alpine nginx -t
 
 git checkout --force --detach "$sha"
 [[ "$(sha256sum .env)" == "$env_checksum_before" ]] || { echo '.env was unexpectedly changed.' >&2; exit 1; }
@@ -121,6 +121,9 @@ docker compose config --quiet
 # that an approved nginx change takes effect.
 docker compose up -d --no-build --pull never postgres analytics generator
 docker compose up -d --no-build --pull never --no-recreate web
+if ! docker image inspect nginx:1.27-alpine >/dev/null 2>&1; then
+  docker compose pull proxy
+fi
 docker compose up -d --no-build --pull never --no-deps --force-recreate proxy
 printf '%s\n' "$sha" > .fkit-bi-infra-sha
 docker compose ps

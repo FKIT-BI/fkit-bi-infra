@@ -73,6 +73,7 @@ context:
 - Push `4130bac9b4f86809e34b587071f52d1ee2189eb2`: infra verify прошёл; Dev deploy завершился на удалённом preflight без диагностического сообщения. Безопасная диагностика подтвердила, что `/opt/fkit-bi` не был Git checkout.
 - Infra delivery теперь передаёт runner-собранный Git bundle и инициализирует metadata рядом с существующим `.env`, не требуя GitHub credentials на сервере. `deliver-dev` получает полную историю `develop` для проверки SHA; локальные stubbed checks прошли.
 - Web commit `b7d3ac87887dc671c200a49bf5a71b29376f47d5` прошёл verify, GHCR publish и Dev service deployment в run `37221632140`.
+- Infra run `37221722491` подтвердил, что у Dev отсутствует локальный `nginx:1.27-alpine`. `nginx -t` перенесён в runner preflight; сервер загрузит только фиксированный proxy-образ при его отсутствии, сохраняя образы приложений без изменений.
 
 ## Spec Change Log
 

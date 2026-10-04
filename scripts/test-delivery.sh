@@ -148,6 +148,9 @@ cat > "$temporary_dir/bin/docker" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'docker %s\n' "$*" >> "$FKIT_BI_TEST_DELIVERY_LOG"
+if [[ "${1:-}" == image && "${2:-}" == inspect ]]; then
+  exit 1
+fi
 EOF
 cat > "$temporary_dir/bin/scp" <<'EOF'
 #!/usr/bin/env bash
@@ -189,12 +192,13 @@ env \
 [[ "$(sha256sum "$server_dir/.env")" == "$env_before" ]]
 [[ "$(git -C "$server_dir" rev-parse HEAD)" == "$test_sha" ]]
 grep -Fx "$test_sha" "$server_dir/.fkit-bi-infra-sha" >/dev/null
-grep -F 'docker run --rm --pull never' "$delivery_log" >/dev/null
+grep -F 'docker run --rm' "$delivery_log" >/dev/null
 grep -F 'nginx:1.27-alpine nginx -t' "$delivery_log" >/dev/null
+grep -F 'docker compose pull proxy' "$delivery_log" >/dev/null
 grep -F 'docker compose up -d --no-build --pull never --no-recreate web' "$delivery_log" >/dev/null
 grep -F 'docker compose up -d --no-build --pull never --no-deps --force-recreate proxy' "$delivery_log" >/dev/null
-if grep -F 'docker compose pull' "$delivery_log" >/dev/null; then
-  echo 'Infra delivery must not pull images.' >&2
+if grep -E 'docker compose pull (postgres|analytics|generator|web)( |$)' "$delivery_log" >/dev/null; then
+  echo 'Infra delivery must not pull database or service images.' >&2
   exit 1
 fi
 

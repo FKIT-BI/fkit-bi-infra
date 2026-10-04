@@ -19,8 +19,10 @@ web — запросом к `/` на порту 80. Сервисный workflow 
 worktree вместе с private `.env`, затем переводит основной checkout на detached
 exact SHA; на первом запуске Git metadata создаются в существующем каталоге без
 замены `.env` и Docker volume. Скрипт не собирает и не скачивает образы, не меняет
-image references, не пересоздаёт `web`; он запускает текущие сервисы и
-пересоздаёт только proxy для применения nginx. В завершение из runner проверяются
+image references и не пересоздаёт `web`; он запускает текущие сервисы и
+пересоздаёт только proxy для применения nginx. Nginx-конфигурация проверяется на
+runner; если закреплённого `nginx:1.27-alpine` ещё нет на Dev, загружается только
+этот proxy-образ. В завершение из runner проверяются
 `/`, `/api/analytics/actuator/health` и `/api/generator/actuator/health`.
 
 Dev: `http://45.132.176.28:8080`. Конфигурация сервера — `/opt/fkit-bi/.env`
