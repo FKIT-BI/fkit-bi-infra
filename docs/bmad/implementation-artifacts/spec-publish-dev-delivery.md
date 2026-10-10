@@ -21,7 +21,7 @@ context:
 
 ## Boundaries & Constraints
 
-**Always:** Работать из `develop`; использовать immutable SHA-теги для сервисов; сохранять private `.env`, PostgreSQL volume и имеющиеся данные; выполнять SSH только с проверкой host key и общей блокировкой; скрывать секретные значения; проверять доставку через публичный `/` и оба API health endpoint. Analytics остаётся единственным владельцем Flyway-миграций.
+**Always:** Работать из `develop`; использовать immutable SHA-теги для сервисов; сохранять private `.env`, PostgreSQL volume и имеющиеся данные; выполнять SSH только с проверкой host key и общей блокировкой; скрывать секретные значения; проверять доставку через публичный `/` и оба API health endpoint. Analytics остаётся единственным владельцем Liquibase-миграций.
 
 **Never:** Не удалять volume, не выполнять `docker compose down -v`, не создавать новые credentials, не раскрывать значения secrets, не заменять образ другого сервиса при delivery, не публиковать или менять production-контур.
 

@@ -1,0 +1,212 @@
+openapi: 3.1.0
+info:
+  title: FKIT BI Authentication API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: |
+    Общий API аутентификации для web-клиента и сервисов FKIT BI.
+    Analytics выпускает JWT; Analytics и Generator проверяют его.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: authentication
+    description: Вход и первичная аутентификация
+  - name: users
+    description: Минимальное создание учётных записей bootstrap-пользователем
+
+paths:
+  /auth/login:
+    post:
+      tags: [authentication]
+      operationId: login
+      summary: Получить access token
+      description: |
+        Публичная операция. При неверной паре логин/пароль возвращает одинаковую ошибку
+        независимо от существования username. Ограничение частоты — 10 запросов в минуту
+        с одного публичного IP; адрес берётся только из доверенного заголовка reverse proxy,
+        который Nginx перезаписывает. Превышение возвращает 429 и Retry-After.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Аутентификация успешна
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationFailed' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /auth/users:
+    post:
+      tags: [users]
+      operationId: createUser
+      summary: Создать учётную запись
+      description: |
+        Доступно только bootstrap-пользователю. Проверка полномочия выполняется сервером
+        по неизменяемому признаку в БД; JWT не содержит role claims. Bootstrap account
+        создаётся оператором одноразовой deployment-командой только при пустом users store.
+        Ограничение частоты — 5 запросов в минуту для bootstrap-пользователя.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserCreate' }
+      responses:
+        '201':
+          description: Учётная запись создана
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        HS256; issuer fkit-bi; audience fkit-bi-api; expiry 30 minutes.
+        Claims: sub, iss, aud, iat, exp. Refresh tokens and roles are not used.
+  headers:
+    Location:
+      description: URI созданного пользователя
+      schema: { type: string, format: uri-reference }
+    RetryAfter:
+      description: Секунды до разрешённой повторной попытки
+      schema: { type: integer, minimum: 1 }
+  responses:
+    BadRequest:
+      description: Некорректный JSON или transport input
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    AuthenticationFailed:
+      description: Неверные credentials или недействительный/истёкший bearer token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Пользователь не имеет права создавать учётные записи
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: Username уже занят
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    UnprocessableEntity:
+      description: Ошибки валидации полей
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    TooManyRequests:
+      description: Превышен лимит запросов
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    InternalError:
+      description: Непредвиденная ошибка с traceId
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+  schemas:
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 64
+          pattern: '^[A-Za-z0-9._-]+$'
+          description: Username нормализуется к нижнему регистру.
+        password: { type: string, minLength: 12, maxLength: 72, writeOnly: true }
+    LoginResponse:
+      type: object
+      additionalProperties: false
+      required: [accessToken, tokenType, expiresIn, user]
+      properties:
+        accessToken: { type: string, minLength: 1 }
+        tokenType: { type: string, const: Bearer }
+        expiresIn: { type: integer, const: 1800, description: Срок действия access token в секундах }
+        user: { $ref: '#/components/schemas/AuthenticatedUser' }
+    AuthenticatedUser:
+      type: object
+      additionalProperties: false
+      required: [id, username, displayName, canCreateUsers]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        displayName: { type: string }
+        canCreateUsers:
+          type: boolean
+          description: Только UI-подсказка; сервер отдельно проверяет полномочие на POST /auth/users.
+    UserCreate:
+      type: object
+      additionalProperties: false
+      required: [username, displayName, initialPassword]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 64
+          pattern: '^[A-Za-z0-9._-]+$'
+          description: Username нормализуется к нижнему регистру и уникален без учёта регистра.
+        displayName: { type: string, minLength: 1, maxLength: 100 }
+        initialPassword:
+          type: string
+          minLength: 12
+          maxLength: 72
+          writeOnly: true
+          description: Не менее 12 символов; backend дополнительно ограничивает UTF-8 представление 72 байтами для BCrypt.
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, username, displayName, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        displayName: { type: string }
+        createdAt: { type: string, format: date-time }
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [code, message, traceId, fieldErrors, details]
+      properties:
+        code: { type: string, minLength: 1 }
+        message: { type: string }
+        traceId: { type: string, minLength: 1 }
+        fieldErrors:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [path, code, message]
+            properties:
+              path: { type: string }
+              code: { type: string }
+              message: { type: string }
+        details: { type: object, additionalProperties: true }

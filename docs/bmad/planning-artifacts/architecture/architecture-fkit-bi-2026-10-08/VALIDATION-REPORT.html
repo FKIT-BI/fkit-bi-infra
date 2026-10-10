@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FKIT BI — Architecture Validation</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b1020; --panel:#141b2f; --line:#2a3554; --text:#edf2ff; --muted:#aab6d3; --ok:#5ee6a8; --warn:#ffca68; --bad:#ff7c89; --accent:#7aa7ff; }
+    * { box-sizing:border-box } body { margin:0; background:linear-gradient(150deg,#0b1020,#111936 55%,#0b1020); color:var(--text); font:15px/1.55 system-ui,sans-serif; }
+    main { max-width:1100px; margin:auto; padding:40px 24px 64px; }
+    h1 { font-size:34px; margin:0 0 8px } h2 { margin-top:34px; font-size:22px } h3 { margin:0 0 8px; font-size:17px }
+    p { color:var(--muted) } .lead { font-size:18px; max-width:850px }
+    .badge { display:inline-block; padding:6px 10px; border:1px solid var(--bad); border-radius:999px; color:var(--bad); font-weight:700; letter-spacing:.03em; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; }
+    .card { background:rgba(20,27,47,.92); border:1px solid var(--line); border-radius:14px; padding:18px; }
+    .card p { margin:0 } .ok { border-left:4px solid var(--ok) } .fix { border-left:4px solid var(--warn) }
+    .num { color:var(--accent); font-weight:800; margin-right:7px } ul { color:var(--muted); padding-left:20px } li { margin:7px 0 }
+    code { color:#c9dcff; background:#0c1327; padding:2px 5px; border-radius:4px }
+    table { width:100%; border-collapse:collapse; background:var(--panel); border-radius:12px; overflow:hidden } th,td { padding:11px 12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top } th { color:#c9dcff }
+    a { color:#9cc0ff } footer { margin-top:38px; color:var(--muted); font-size:13px }
+  </style>
+</head>
+<body><main>
+  <span class="badge">CHANGES REQUIRED</span>
+  <h1>FKIT BI: проверка SQL и telemetry architecture</h1>
+  <p class="lead">Базовая архитектура подходит для MVP: одна PostgreSQL, нормализованное equipment-ядро, append-only raw, суточные UTC-партиции и чтение готовых проекций. Смена БД, Kafka или TSDB не требуется. Перед DDL нужно закрыть несколько конкретных гонок и operational gaps.</p>
+
+  <h2>Что уже правильно</h2>
+  <div class="grid">
+    <section class="card ok"><h3>Нормализация</h3><p>Owner IDs и составные FK оправданы; справочники semantic/unit нормализованы; JSONB ограничен display-only параметрами.</p></section>
+    <section class="card ok"><h3>Hot path</h3><p>Batch header + typed raw rows, отсутствие per-row FK/UPSERT и один signal/time index соответствуют принятой нагрузке.</p></section>
+    <section class="card ok"><h3>Чтение</h3><p>MVCC и готовые projections отделяют frontend от ingestion и перерасчётов.</p></section>
+  </div>
+
+  <h2>Обязательные поправки до реализации</h2>
+  <div class="grid">
+    <section class="card fix"><h3><span class="num">01</span>Partition lifecycle</h3><p>Узкие owner-owned routines, общий advisory lock, короткий lock timeout, создание заранее и retry retention без DDL в insert path.</p></section>
+    <section class="card fix"><h3><span class="num">02</span>Batch hash</h3><p><code>payload_hash</code> связывает idempotency key с содержимым; несовпадающий retry становится явной ошибкой.</p></section>
+    <section class="card fix"><h3><span class="num">03</span>Durable dirty handoff</h3><p>Raw и recalculation hints фиксируются одной транзакцией; retention ждёт consumption и публикацию проекций.</p></section>
+    <section class="card fix"><h3><span class="num">04</span>Historical window</h3><p>Historical ограничен активными 90 сутками; полностью истёкшие UTC-дни удаляются только без jobs/leases.</p></section>
+    <section class="card fix"><h3><span class="num">05</span>First-use marker</h3><p>Неудаляемый <code>signal_usage</code> сохраняет факт первого raw и сериализует первую запись с изменением семантики.</p></section>
+    <section class="card fix"><h3><span class="num">06</span>Aggregate locks</h3><p>Component tree блокируется на Machine, Shift schedule — на Enterprise до проверок циклов и пересечений.</p></section>
+    <section class="card fix"><h3><span class="num">07</span>Physical codes</h3><p>Фиксируются числовые mapping; quality хранится один раз, без дублирующих SOURCE_* flags.</p></section>
+    <section class="card fix"><h3><span class="num">08</span>Bounded storage</h3><p>Ключи и string values ограничены; ingest headers очищаются chunks с индексом и vacuum monitoring.</p></section>
+    <section class="card fix"><h3><span class="num">09</span>Bulkheads</h3><p>Query получает зарезервированные connections; historical и workers ограничены permits и disk preflight.</p></section>
+    <section class="card fix"><h3><span class="num">10</span>Startup contract</h3><p>One-shot Liquibase owner → Analytics runtime → schema-ready → Generator compatible readiness.</p></section>
+  </div>
+
+  <h2>Нагрузочный смысл</h2>
+  <table>
+    <tr><th>Профиль</th><th>Интерпретация</th></tr>
+    <tr><td>30 measurements/s</td><td>Номинальная длительная нагрузка; около 233 млн rows за 90 суток.</td></tr>
+    <tr><td>200/s</td><td>Capacity benchmark не менее 30 минут, не sizing на 90 суток.</td></tr>
+    <tr><td>1000/s</td><td>60-секундный burst.</td></tr>
+    <tr><td>1000–2000/s</td><td>Throttled historical с admission control.</td></tr>
+    <tr><td>100 GB</td><td>Проверяемая нижняя граница; 150 GB рекомендуется. Нужен benchmark heap/index/WAL/temp.</td></tr>
+  </table>
+
+  <h2>Вердикт</h2>
+  <p class="lead">Архитектуру сохраняем и точечно усиливаем. После принятия десяти поправок обновляются spine и specs, повторяется lint, затем проектирование продолжается с физической модели аналитических проекций.</p>
+  <footer>Полная версия: <a href="VALIDATION-REPORT.md">VALIDATION-REPORT.md</a> · Reviews: <a href="reviews/review-normalization.md">normalization</a>, <a href="reviews/review-currentness.md">currentness</a>, <a href="reviews/review-adversarial.md">adversarial</a>.</footer>
+</main></body></html>
