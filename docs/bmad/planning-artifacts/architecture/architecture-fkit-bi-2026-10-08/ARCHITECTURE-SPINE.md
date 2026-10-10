@@ -122,7 +122,7 @@ flowchart LR
 
 - **Binds:** Входной HTTP(S) и развёртывание MVP на Dev.
 - **Prevents:** Ожидание, что wildcard-сертификат автоматически удостоверяет IP, или незаметное понижение TLS при ошибке выпуска.
-- **Rule:** Nginx принимает запросы по IP и доменному имени. Основной адрес — `bi.kitexp.ru`, сертификат содержит `bi.kitexp.ru` и `*.bi.kitexp.ru`; IP сохраняется как дополнительный адрес. До отдельного решения IP endpoint доступен по HTTP, домен — по HTTPS. `TLS_MODE=public|self-signed` выбирается явно; self-signed сертификат генерируется автоматически для dev/demo, а сбой public issuance не переключает режим молча. Wildcard выпускается Certbot через DNS-01 с автоматическими auth/cleanup hooks к Yandex Cloud DNS API; DNS credentials — deploy secret с минимальным доступом к целевой зоне.
+- **Rule:** Nginx принимает запросы по IP и доменному имени. Основной адрес — `bi.kitexp.ru`, сертификат содержит `bi.kitexp.ru` и `*.bi.kitexp.ru`; DNS A apex и wildcard указывают на подтверждённый IP `45.132.176.28`. IP endpoint `http://45.132.176.28` остаётся доступен по HTTP; HTTPS по IP сейчас не требуется. `TLS_MODE=public|self-signed` выбирается явно; self-signed сертификат генерируется автоматически для dev/demo, а сбой public issuance не переключает режим молча. Wildcard выпускается Certbot через DNS-01 с автоматическими auth/cleanup hooks к Yandex Cloud DNS API; DNS credentials — deploy secret с минимальным доступом к целевой зоне.
 
 ### AD-14 — [ADOPTED] Три ежедневных полных DB dump
 
