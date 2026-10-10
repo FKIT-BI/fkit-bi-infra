@@ -164,11 +164,11 @@
 
 - [x] Утвердить логические схемы PostgreSQL либо отказаться от схем в пользу префиксов таблиц.
 - [x] Определить владельца Liquibase и порядок применения миграций.
-- [x] Определить роли БД и разрешения analytics/generator.
+- [x] Для изолированного test/demo контура выбрать один общий PostgreSQL account для Analytics, Generator, Liquibase и exporter; least-privilege DB role split отложить до production/customer data.
 - [x] Cross-schema транзакции разрешены только для явно описанных atomic use cases; сетевых вызовов внутри транзакции нет.
 - [x] Определить правила ссылочной целостности между core, telemetry, analytics, incidents и generator.
-- [x] Backup: ежедневный PostgreSQL custom-format dump, 7 локальных копий, RPO ≤24 ч, целевое ручное восстановление ≤4 ч; без PITR/HA. Restore drill — обязательная проверка до выпуска, но не блок аналитического проектирования.
-- [x] Raw retention: удалять только целые UTC-партиции старше 90 суток, когда их верхняя граница истекла и нет ссылающейся незавершённой dirty work; поддерживать партиции на 7 дней вперёд. DDL/cleanup не включать в ingestion transaction.
+- [x] Backup: ежедневный полный PostgreSQL custom-format dump всей application database, 3 локальные копии, RPO ≤24 ч, целевое ручное восстановление ≤4 ч; без PITR/HA. Restore drill — обязательная проверка до выпуска, но не блок аналитического проектирования.
+- [x] Raw retention: удалять только целые UTC-партиции старше 90 суток, когда их верхняя граница истекла и нет ссылающейся незавершённой dirty work; проверку/отсоединение координировать неблокирующим per-day barrier и откладывать при contention. Поддерживать партиции на 7 дней вперёд. DDL/cleanup не включать в ingestion transaction.
 
 Результат: data ownership matrix и правила доступа к БД.
 
@@ -747,14 +747,14 @@
 
 - [x] Обязательный JWT Bearer для Analytics и Generator API; одинаковые права без ролей/RBAC.
 - [x] `author` остаётся непроверенным display value; полный audit configuration/incidents вне MVP.
-- [x] Сохранить отдельные least-privilege DB users, секреты вне репозитория, лимиты и safeguards из утверждённых блоков.
-- [x] Nginx поддерживает HTTPS на `*.bi.kitexp.ru`, Certbot public wildcard и self-signed demo/dev режимы.
+- [x] В test/demo использовать один общий PostgreSQL account для обеих служб, Liquibase и monitoring exporter; секрет остаётся вне Git. Разделение по least-privilege ролям отложено до выхода из тестового контура.
+- [x] Nginx поддерживает доступ и по IP, и по домену; публичный домен получает автоматический HTTPS через Certbot, self-signed режим выбирается явно для demo/dev.
 - [x] Первая базовая учётная запись provisioned оператором; только она добавляет пользователей через минимальную форму, без ролей/RBAC.
-- [x] DNS управляется Yandex Cloud DNS; wildcard challenge планируется автоматизировать Certbot `dns-yandexcloud` с минимально привилегированной service account.
+- [x] DNS управляется Yandex Cloud DNS; DNS-01 автоматизируется через Certbot hooks/API с service account, ограниченной целевой зоной. Не фиксировать устаревший непроверенный Certbot plugin как зависимость.
 - [x] Публиковать Nginx на host ports 80/443; внутренние порты приложений и БД не публиковать.
 - [x] Основной host — `bi.kitexp.ru`; сертификат включает `bi.kitexp.ru` и `*.bi.kitexp.ru`.
 - [x] Зафиксировать issuer/claims/алгоритм/срок JWT, token storage, bootstrap и минимальные поля формы пользователя.
-- [x] Зафиксировать DNS plugin credentials как deploy-time secret с минимальными правами.
+- [x] Зафиксировать DNS service-account credentials как deploy-time secret с zone-scoped правом управления DNS; не передавать ключ в Git или чат.
 - [x] Описать отдельный Auth OpenAPI: login, bootstrap-only создание пользователя, ошибки и abuse limits.
 
 Результат: `docs/bmad/specs/spec-security-audit/` и `docs/contracts/auth-api.yaml` (2 operations).

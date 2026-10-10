@@ -28,6 +28,7 @@
 - Compete two workers for dirty work/deadlines and verify `FOR UPDATE SKIP LOCKED` gives one active lease per row; expired lease becomes recoverable.
 - Verify rollback of a failed batch/incident/config command leaves no partial rows or durable hint that claims success.
 - Verify locks are acquired in documented stable order and user-facing contention exits without partial mutation.
+- Race raw batch acceptance and worker publication against partition retention: shared try-lock/hint or worker lock must prevent drop; retention must skip on contention; writer must return bounded retryable contention without waiting; a raw-read DDL conflict must cancel after short `lock_timeout`; projected frontend reads must continue.
 
 ## Contract and acceptance coverage
 

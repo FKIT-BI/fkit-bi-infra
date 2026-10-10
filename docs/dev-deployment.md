@@ -41,7 +41,14 @@ HTTP 200; backend ответил `{"status":"UP"}`. Infra `f08d8eb8004538f70e7b4
 commit SHA и delivery только изменённого сервиса. Infra workflow доставляет
 Compose/nginx-конфигурацию по push в `develop`.
 
-Dev: `http://45.132.176.28:8080`. Конфигурация сервера — `/opt/fkit-bi/.env`
+Текущая проверенная точка Dev на 2026-10-04: `http://45.132.176.28:8080`.
+Это временный прямой endpoint, а не итоговая схема доступа; актуальность IP нужно
+подтвердить перед DNS-настройкой. Целевая схема сохраняет доступ и по публичному
+IP, и по `bi.kitexp.ru`: домен обслуживается через Nginx на 80/443 с автоматическим
+Certbot DNS-01 для `bi.kitexp.ru` и `*.bi.kitexp.ru`; IP остаётся доступен по HTTP
+в MVP, пока отдельно не решён HTTPS для IP. DNS A-записи apex и wildcard
+направляются на текущий публичный IP, AAAA публикуется только при рабочем IPv6.
+Конфигурация сервера — `/opt/fkit-bi/.env`
 (режим 600, никогда не коммитится); PostgreSQL хранится в named volume
 `postgres-data`. Никогда не выполняйте `docker compose down -v`.
 

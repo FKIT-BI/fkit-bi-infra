@@ -11,8 +11,8 @@ Work is grouped by end-to-end user value. Stories are outcomes with a measurable
 - **1.1 Application foundations:** establish Java/Spring module/package boundaries, JDBC access, configuration profiles, health/readiness, error envelope and trace ID behavior. Verify build and CI from clean checkout.
 - **1.2 PostgreSQL migration ownership:** remove Flyway bootstrap dependency where specified, add Analytics-owned Liquibase schemas/catalogs/release marker, protect old dev marker metadata, and make Generator readiness depend on supported schema release. Verify clean and existing-dev DB Testcontainers cases.
 - **1.3 Authentication:** bootstrap operator setup/login, password hashing, JWT issue/validation, create-user form/API, shared bearer validation in both services. Verify auth API contract and denied protected requests.
-- **1.4 Local/prod edge and observability:** Compose, Nginx routes for `bi.kitexp.ru` and `*.bi.kitexp.ru`, Certbot and self-signed modes, Prometheus/Grafana/exporters, provisioned dashboards, JSON logs and safe trace propagation. Verify startup without observability dependency and TLS modes.
-- **1.5 Backup/restore operations:** scheduled dump, permissions, age monitoring, retention/partition operation runbook and isolated restore drill. Do not implement PITR/HA.
+- **1.4 Local/prod edge and observability:** Compose, Nginx routes for `bi.kitexp.ru` and `*.bi.kitexp.ru` plus IP access, Certbot DNS-01 automation through Yandex API hooks and explicit self-signed mode, Prometheus/Grafana/exporters, provisioned dashboards, JSON logs and safe trace propagation. Verify startup without observability dependency, both TLS modes and domain/IP routes.
+- **1.5 Backup/restore operations:** scheduled daily full custom-format DB dump with only three latest copies, restrictive permissions, age monitoring, raw partition maintenance runbook and isolated restore drill. Do not implement PITR/HA.
 
 ## Epic 2 — Configure enterprise, shifts and equipment
 

@@ -3,7 +3,8 @@
 ## PostgreSQL backup and restore
 
 - Produce one PostgreSQL custom-format logical dump per day during the lowest-activity window; do not run a full dump on the hot ingestion transaction or hold application locks for its duration.
-- Keep seven most recent local restore points in a mounted backup directory with restrictive owner-only permissions. The location and database credentials come from deployment secrets/configuration, never Git.
+- Keep the **three most recent daily full backups** in a mounted backup directory with restrictive owner-only permissions. Each file is a compressed PostgreSQL custom-format logical dump of the whole application database, including schemas, tables/index definitions and data for equipment/configuration, telemetry raw rows still within retention, state/metric/loss projections, incidents, Generator scenarios/runs and Liquibase metadata.
+- A database dump does not contain PostgreSQL cluster roles/users, host/Compose configuration, `.env` or other secrets, TLS private keys/certificates, container images, or Prometheus/Grafana volumes. The single test-contour PostgreSQL account is recreated from deployment configuration before restore.
 - Treat **RPO ≤24 hours** and **manual restore RTO ≤4 hours** as demo-MVP targets. No point-in-time recovery, WAL archive service, automated failover, or HA replica is introduced.
 - Bound backup CPU/I/O where the runtime permits; expose last-success timestamp, duration, size and failure/age status to logs/alerts. A missed daily backup is an operational warning.
 - Before each demo release, restore the newest dump into an isolated database, verify database connectivity, schema release, Liquibase state, and a representative read path. Record timestamp and result.
@@ -14,7 +15,7 @@
 - Raw telemetry retention is 90 days, measured against UTC partition upper bounds. Drop a partition only after its exclusive upper bound is at or before `now() - 90 days`; do not delete individual hot-path rows.
 - Pre-create partitions through at least seven days ahead. Partition creation/drop runs as bounded maintenance outside ingestion transactions and emits outcome metrics/logs.
 - Retain all minute/interval projections for the demo history according to existing analytics storage specs. Raw expiry does not silently delete projections.
-- Maintenance must not drop a range while an active calculation/recalculation references it. Detect and defer safely; never block raw inserts waiting for replay.
+- Raw insert takes a shared try-lock for its UTC day and commits the measurement plus durable hint in the same transaction. If unavailable, it returns a retryable result without waiting; the caller applies bounded retry, then the already-approved observable telemetry-loss policy. A calculation worker retains a shared lock for the duration of raw reads and projection publication; if unavailable, it leaves the durable job queued. Retention takes an exclusive try-lock, then rechecks durable hints/jobs/leases and incomplete projection publication; on conflict it skips that day and retries later. Partition DDL also has a short `lock_timeout` and is cancelled/retried on conflict. Frontend read API uses projections and never participates in this lock protocol.
 
 ## Structured logs and correlation
 
@@ -23,3 +24,11 @@
 - Durable asynchronous jobs persist the initiating trace as `correlationId` and retain their own job/run IDs, so logs remain correlatable after the initiating request ends.
 - Never log password, bearer/JWT, signing key, database credential, DNS/certificate secret, or raw telemetry body/value. Exception logs use safe error codes and trace context, not request dumps.
 - High-cardinality IDs belong in structured logs, not Prometheus labels. Log transport remains stdout; Loki/Tempo and an external tracing backend are not MVP requirements.
+
+## Public entrypoints and automatic TLS
+
+- The same Nginx serves the application by public IP and by `bi.kitexp.ru` / `*.bi.kitexp.ru`; DNS A records for the apex-subdomain host and wildcard point to the current public host IP. Do not publish an AAAA record unless the server has working public IPv6.
+- Public domain mode uses Certbot DNS-01 to issue one certificate containing both `bi.kitexp.ru` and `*.bi.kitexp.ru`, renews automatically, validates renewal and reloads Nginx. The IP endpoint remains available over HTTP during the transition and in the agreed MVP; the domain certificate does not cover the IP literal. HTTPS-by-IP remains an explicit open choice.
+- For automatic DNS updates, use Certbot auth/cleanup hooks against the Yandex Cloud DNS API unless a maintained compatible plugin is verified at implementation time. Do not depend on the old `certbot-dns-yandexcloud` package without a compatibility check. The hook creates/removes only the ACME TXT challenge and fails visibly if credentials, zone identifiers or API access are missing; it never silently changes public mode to self-signed.
+- Operator creates a service account and grants `dns.editor` on the target DNS zone, then installs its credential as a host/deployment secret. Do not transmit or commit private key material. Required non-secret inputs are DNS folder/zone IDs and the current host public IP.
+- Self-signed mode is explicit for test/demo; create the certificate automatically when the persistent certificate is absent and clearly report that browser/client trust is not automatic. Public mode remains the default for the public domain.

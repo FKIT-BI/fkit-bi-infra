@@ -54,13 +54,13 @@ spring:
 
 `liquibase-core` заменяет Flyway dependencies. Context-load test отключает `spring.liquibase.enabled`; проверки реальных migrations выполняются отдельно на PostgreSQL/Testcontainers, а не H2.
 
-Для MVP Liquibase запускается автоматически внутри Analytics startup. `spring.liquibase.*` использует `fkit_bi_owner`, основной datasource — `fkit_bi_analytics`; readiness остаётся false до полного завершения migrations. Generator запускается после Analytics readiness. Отдельный migrator container не вводится.
+Для изолированного тестового MVP Liquibase запускается автоматически при старте Analytics. Liquibase и runtime datasource используют один общий PostgreSQL account, который также использует Generator; сложная матрица owner/runtime/generator roles пока не вводится. Readiness Analytics остаётся false до полного завершения migrations. Generator запускается после Analytics readiness. Отдельный migrator container не вводится.
 
-Liquibase поддерживает single-row `equipment.schema_release`. После migrations Analytics readiness проверяет точное ожидаемое release; Generator readiness делает ту же проверку до доступа к данным. В MVP не вводится диапазон совместимых версий: несовпадение делает приложение not-ready с явной диагностикой.
+Liquibase поддерживает single-row `equipment.schema_release`. После migrations Analytics readiness проверяет точное ожидаемое release; Generator readiness делает ту же проверку до доступа к данным. В MVP не вводится диапазон совместимых версий: несовпадение делает приложение not-ready с явной диагностикой. Эта проверка обязательна независимо от упрощённых DB credentials.
 
-Для runtime и migration допускаются отдельные credentials. Целевое разделение:
+Для тестового контура используется один общий application/development credential; он не считается production least-privilege моделью. Разделение на роли ниже отложено до появления внешних customer/production данных:
 
-| Role | Права |
+| Будущая role (не создавать в MVP) | Целевое ограничение |
 | --- | --- |
 | `fkit_bi_owner` | Liquibase, DDL, владение schemas и objects |
 | `fkit_bi_analytics` | Runtime DML только в разрешённых schemas |
@@ -77,4 +77,4 @@ Liquibase поддерживает single-row `equipment.schema_release`. Пос
 4. На чистой базе Liquibase создаёт все schemas и собственные `DATABASECHANGELOG`/`DATABASECHANGELOGLOCK`.
 5. На существующей dev-базе первый запуск проверяется отдельным migration integration test; очистка старых metadata выполняется только явной обслуживающей операцией.
 
-Analytics считается готовым для запуска Generator только после успешного завершения Liquibase и проверки `equipment.schema_release`. Оркестрация запуска должна использовать health/readiness Analytics, а не параллельный запуск двух владельцев DDL. Удаление Flyway, добавление Liquibase, разделение migration/runtime credentials и startup dependency Generator выполняются одним implementation slice, чтобы не существовало промежуточной несовместимой конфигурации.
+Analytics считается готовым для запуска Generator только после успешного завершения Liquibase и проверки `equipment.schema_release`. Оркестрация запуска должна использовать health/readiness Analytics, а не параллельный запуск двух владельцев DDL. Удаление Flyway, добавление Liquibase и startup dependency Generator выполняются одним implementation slice. DB role separation намеренно не входит в этот slice; shared credential остаётся только для изолированного тестового стенда.

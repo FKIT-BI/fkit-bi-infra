@@ -37,7 +37,7 @@ observability/
 - Prometheus и exporters не публикуются в public interface.
 - Grafana по умолчанию привязывается к loopback host и доступна через SSH tunnel; публикация через защищённый reverse proxy является отдельным deployment решением.
 - Admin user/password Grafana и PostgreSQL exporter credentials поступают из private `.env`; значения не коммитятся.
-- Для exporter создаётся отдельный минимально привилегированный PostgreSQL monitoring user; application credentials не переиспользуются.
+- В текущем изолированном test/demo контуре postgres_exporter использует общий PostgreSQL account вместе с Analytics, Generator и Liquibase; отдельная monitoring role отложена до выхода за тестовый контур.
 - Prometheus scrape timeout меньше scrape interval, а недоступный target не задерживает другие scrape jobs.
 
 ## Health и smoke test

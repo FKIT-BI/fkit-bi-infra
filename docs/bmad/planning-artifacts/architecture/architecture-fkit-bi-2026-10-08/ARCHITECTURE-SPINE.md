@@ -7,7 +7,7 @@ paradigm: 'Ports and Adapters with single-writer shared-database ownership'
 scope: 'PostgreSQL configuration model, raw telemetry, Liquibase and runtime data boundaries'
 status: final
 created: '2026-10-08'
-updated: '2026-10-09'
+updated: '2026-10-10'
 binds:
   - SPEC-sql-equipment-foundation/CAP-1..CAP-5
   - SPEC-raw-telemetry-ingestion/CAP-1..CAP-6
@@ -56,7 +56,7 @@ flowchart LR
 
 - **Binds:** Liquibase и запуск Analytics/Generator.
 - **Prevents:** Конкурирующие миграции и запуск Generator против неполной схемы.
-- **Rule:** Только Analytics применяет Liquibase при startup через отдельные `spring.liquibase` owner credentials; его readiness остаётся false до успеха, а Generator стартует после Analytics readiness. Основной Analytics datasource использует runtime credentials. Оба приложения дополнительно проверяют точное поддерживаемое значение `equipment.schema_release`; переход Flyway → Liquibase, разделение credentials и startup dependency реализуются одним implementation slice.
+- **Rule:** Только Analytics применяет Liquibase при startup; его readiness остаётся false до успеха, а Generator стартует после Analytics readiness. В тестовом контуре оба приложения, встроенный Liquibase и exporter используют один общий PostgreSQL account; отдельные owner/runtime credentials и DB roles отложены. Оба приложения дополнительно проверяют точное поддерживаемое значение `equipment.schema_release`; production-разделение credentials не входит в MVP.
 
 ### AD-3 — [ADOPTED] Владение данными по модулям
 
@@ -86,7 +86,7 @@ flowchart LR
 
 - **Binds:** Raw storage lifecycle.
 - **Prevents:** Построчная очистка и неограниченный рост горячей таблицы.
-- **Rule:** `raw_measurement` разделяется на UTC-day RANGE partitions по `observed_at`, без default partition, с локальным индексом `(signal_id, observed_at)`; raw retention составляет 90 суток по времени PostgreSQL. Historical принимает только этот active window. Registry UTC-day partitions и его row locks исключают гонку retention с созданием raw/recalculation work; detach разрешён только после перевода дня в `RETIRING` и проверки отсутствия unconsumed hints, пересекающих jobs/leases и неполностью опубликованных проекций.
+- **Rule:** `raw_measurement` разделяется на UTC-day RANGE partitions по `observed_at`, без default partition, с локальным индексом `(signal_id, observed_at)`; raw retention составляет 90 суток по времени PostgreSQL. Historical принимает только этот active window. Приём raw берёт shared try-lock для UTC-дня и в той же транзакции фиксирует raw и durable hint; если lock недоступен из-за retention, пакет получает retryable отказ без ожидания (далее действует политика ограниченного retry/потери для telemetry). Worker удерживает shared session lock на всё время raw-read и publication; если lock недоступен, не начинает работу. Retention берёт exclusive try-lock и повторно проверяет hints, jobs/leases и неполностью опубликованные проекции. Любое DDL ограничено коротким `lock_timeout`; при конфликте операция отменяется и повторяется позднее. Read API читает только projections и не берёт retention lock.
 
 ### AD-8 — [ADOPTED] Независимые write, calculation и read paths
 
@@ -104,19 +104,37 @@ flowchart LR
 
 - **Binds:** Создание и удаление partitions.
 - **Prevents:** Insert ждёт DDL-lock или создаёт таблицу на demand.
-- **Rule:** Liquibase устанавливает owner-owned `SECURITY DEFINER` routines с fixed `search_path`, validated date и единым topology advisory lock. Analytics заранее поддерживает диапазон raw window плюс 7 future days; и create, и обычный detach используют короткие lock/statement timeouts и retry. DDL никогда не выполняется внутри TelemetrySink transaction; `DETACH CONCURRENTLY` отложен.
+- **Rule:** Liquibase устанавливает `SECURITY DEFINER` routines с fixed `search_path`, validated date и единым topology advisory lock. Analytics заранее поддерживает диапазон raw window плюс 7 future days; create и detach/drop используют короткие lock/statement timeouts и retry. Если DDL не может получить блокировки сразу, оно отменяется и повторяется вне горячего пути; ingest не выполняет DDL. `DETACH CONCURRENTLY` отложен.
 
-### AD-11 — [ADOPTED] Раздельные database roles
+### AD-11 — [ADOPTED] Единая DB-учётная запись тестового контура
 
 - **Binds:** Liquibase, runtime services и monitoring.
-- **Prevents:** Generator получает DDL или произвольную запись в чужие schemas.
-- **Rule:** `fkit_bi_owner`, `fkit_bi_analytics`, `fkit_bi_generator` и `fkit_bi_monitor` имеют отдельные credentials и минимальные grants. Analytics использует owner только встроенным Liquibase на startup, основной datasource — только runtime role; Generator не получает DDL или telemetry UPDATE/DELETE.
+- **Prevents:** Настройка тестового стенда разрастается отдельными учетными записями и секретами до появления практической необходимости.
+- **Rule:** В тестовом контуре один общий PostgreSQL account используется Analytics, Generator, Liquibase и postgres_exporter. Это сознательный MVP-компромисс, не production security baseline. Сохраняются application-level владение доменными данными, readiness и проверка `equipment.schema_release`; ролевое разделение возвращается перед production/реальными внешними данными.
 
 ### AD-12 — [ADOPTED] Единое физическое кодирование telemetry
 
 - **Binds:** Generator writer, Analytics reader и SQL CHECK constraints.
 - **Prevents:** Сервисы по-разному интерпретируют одинаковые `SMALLINT` и flag bits.
 - **Rule:** Batch mode: `1=REALTIME`, `2=HISTORICAL`; source quality: `0=GOOD`, `1=UNCERTAIN`, `2=BAD`; validation flags: `1=OUT_OF_RANGE`, `2=CLOCK_SKEW`. Quality не дублируется в flags; producer IDs ограничены 128 символами, `value_text` — 500.
+
+### AD-13 — [ADOPTED] Доступ по IP и домену с явным TLS-режимом
+
+- **Binds:** Входной HTTP(S) и развёртывание MVP на Dev.
+- **Prevents:** Ожидание, что wildcard-сертификат автоматически удостоверяет IP, или незаметное понижение TLS при ошибке выпуска.
+- **Rule:** Nginx принимает запросы по IP и доменному имени. Основной адрес — `bi.kitexp.ru`, сертификат содержит `bi.kitexp.ru` и `*.bi.kitexp.ru`; IP сохраняется как дополнительный адрес. До отдельного решения IP endpoint доступен по HTTP, домен — по HTTPS. `TLS_MODE=public|self-signed` выбирается явно; self-signed сертификат генерируется автоматически для dev/demo, а сбой public issuance не переключает режим молча. Wildcard выпускается Certbot через DNS-01 с автоматическими auth/cleanup hooks к Yandex Cloud DNS API; DNS credentials — deploy secret с минимальным доступом к целевой зоне.
+
+### AD-14 — [ADOPTED] Три ежедневных полных DB dump
+
+- **Binds:** Восстановление demo MVP.
+- **Prevents:** Неясность состава копии и накопление неограниченного числа локальных dump.
+- **Rule:** Один раз в день создаётся полный PostgreSQL custom-format logical dump базы приложения; хранятся только три последние ежедневные копии с ограниченными файловыми правами. Dump включает схему и данные application DB, включая конфигурацию, raw в текущем retention, проекции, инциденты, сценарии/запуски и Liquibase metadata. Он не заменяет копирование ролей, deployment secrets, TLS keys или Prometheus/Grafana volumes; это тестовый контурный recovery, не защита от потери хоста.
+
+### AD-15 — [ADOPTED] Неблокирующий retention maintenance
+
+- **Binds:** Удаление raw UTC-day partitions при активных запросах и пересчётах.
+- **Prevents:** Ожидание очистки со стороны ingestion, аналитического чтения или пользовательских запросов.
+- **Rule:** Maintenance пытается получить exclusive per-day lock без ожидания, затем перепроверяет долговечные hints, jobs/leases и незавершённые публикации. Raw insert берёт shared try-lock в транзакции с записью durable hint; worker удерживает shared lock на всё время чтения raw и публикации результата. Вставка не ждёт: при конфликте получает retryable отказ и следует bounded retry/явной telemetry loss policy. Read API работает по projections и не берёт этот lock. Partition DDL имеет короткий `lock_timeout`, поэтому обслуживание может быть отложено из-за активной транзакции, а запросы frontend не затрагиваются.
 
 ## Consistency Conventions
 

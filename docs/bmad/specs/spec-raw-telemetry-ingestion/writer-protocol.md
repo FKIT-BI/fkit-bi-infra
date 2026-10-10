@@ -28,9 +28,9 @@ payloadHash
 2. Начать короткую транзакцию с ограниченными lock и statement timeout.
 3. Вставить batch header по `(producerId, producerBatchId)`. При конфликте сравнить `payloadHash`: равный hash немедленно возвращает ранее принятый результат, даже если raw partition уже удалена; несовпадающий даёт `BATCH_ID_REUSED_WITH_DIFFERENT_PAYLOAD`.
 4. Для нового batch в стабильном порядке взять shared transaction advisory locks для distinct `signalId`, перепроверить snapshot и зарегистрировать отсутствующие `signal_usage`.
-5. Заблокировать UTC-day registry rows `FOR SHARE` и проверить `status = ACTIVE`.
-6. Batch-insert всех measurement rows и per-machine `recalculation_hint`.
-7. Commit. При любой ошибке весь новый batch, включая header, откатывается.
+5. Для каждой затронутой UTC-day partition в стабильном порядке получить `pg_try_advisory_xact_lock_shared` из retention barrier и проверить `status = ACTIVE`. Если try-lock недоступен или день уже `RETIRING`, немедленно откатить новый batch и вернуть retryable contention error; блокирующего fallback нет.
+6. Batch-insert всех measurement rows и per-machine `recalculation_hint` в той же транзакции, удерживая shared xact locks.
+7. Commit. При любой ошибке весь новый batch, включая header и hints, откатывается.
 
 Любая ошибка откатывает весь новый пакет. Partial success отсутствует. Повтор после неопределённого результата использует тот же `producerBatchId`; исправленный пакет получает новый идентификатор.
 

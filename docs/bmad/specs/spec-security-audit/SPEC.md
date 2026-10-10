@@ -26,7 +26,7 @@ FKIT BI предоставляет API конфигурации, управле�
 ## Constraints
 
 - Роли/RBAC, OAuth, полный аудит и подтверждённая атрибуция `author` не входят в MVP.
-- Сохраняются действующие требования least privilege для БД, разделения секретов, ограничений запросов и внутренней доступности observability.
+- В изолированном test/demo контуре одна PostgreSQL учётная запись может использоваться обеими Java-службами, Liquibase и monitoring exporter для простоты. Пароли и JWT/DNS/TLS secrets всё равно хранятся вне Git; до production/external customer data требуется вернуться к least-privilege разделению.
 - Wildcard-сертификат Let’s Encrypt требует DNS-01; самоподписный сертификат — отдельный режим доверия для разработки и демонстрации.
 - DNS-провайдер выбран: Yandex Cloud DNS; автоматизация и секреты Certbot описаны в `security-and-deployment.md`.
 - Основной host — `bi.kitexp.ru`; сертификат содержит и `bi.kitexp.ru`, и `*.bi.kitexp.ru`.
