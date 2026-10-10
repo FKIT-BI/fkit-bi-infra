@@ -20,7 +20,8 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       FKIT_BI_GIT_SHA: ${GIT_SHA}
-    depends_on: {postgres: {condition: service_healthy}}
+    depends_on:
+      postgres: {condition: service_healthy}
     healthcheck: {test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/readiness"], interval: 10s, timeout: 3s, retries: 12}
     restart: unless-stopped
   generator:
@@ -30,7 +31,9 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       FKIT_BI_GIT_SHA: ${GIT_SHA}
-    depends_on: {postgres: {condition: service_healthy}}
+    depends_on:
+      postgres: {condition: service_healthy}
+      analytics: {condition: service_healthy}
     healthcheck: {test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/readiness"], interval: 10s, timeout: 3s, retries: 12}
     restart: unless-stopped
   web:

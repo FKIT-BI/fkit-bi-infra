@@ -204,6 +204,7 @@ if grep -E 'docker compose pull (postgres|analytics|generator|web)( |$)' "$deliv
 fi
 
 # bootstrap-dev starts the complete currently-published service set.
+grep -A 12 '^  generator:' compose.yaml | grep -F '      analytics: {condition: service_healthy}' >/dev/null
 bootstrap_dir="$temporary_dir/bootstrap"
 mkdir -p "$bootstrap_dir/scripts"
 cp scripts/bootstrap-dev.sh scripts/healthcheck.sh "$bootstrap_dir/scripts/"
