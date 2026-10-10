@@ -2,7 +2,7 @@
 title: '1.3 — Аутентификация и учётные записи'
 type: 'feature'
 created: '2026-10-10'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 review_loop_iteration: 0
 baseline_commit: 'a52c1f0c77825fd7a195f0a0cc39b1b8045a75ae'
