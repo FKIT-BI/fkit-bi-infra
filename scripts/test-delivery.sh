@@ -140,13 +140,19 @@ grep -F "Dev infra delivery is disabled" .github/workflows/ci.yml >/dev/null
 test_sha="$(git rev-parse refs/remotes/origin/develop)"
 server_dir="$temporary_dir/server"
 mkdir -p "$server_dir"
-printf '%s\n' 'PRIVATE_VALUE=unchanged' > "$server_dir/.env"
+printf '%s\n' \
+  'PRIVATE_VALUE=unchanged' \
+  'GRAFANA_ADMIN_PASSWORD=story-1-4-test-secret' > "$server_dir/.env"
 env_before="$(sha256sum "$server_dir/.env")"
 delivery_log="$temporary_dir/delivery.log"
 
 cat > "$temporary_dir/bin/docker" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "$*" == 'compose config --environment' ]]; then
+  grep -E '^GRAFANA_ADMIN_PASSWORD=' .env || true
+  exit 0
+fi
 printf 'docker %s\n' "$*" >> "$FKIT_BI_TEST_DELIVERY_LOG"
 if [[ "${1:-}" == image && "${2:-}" == inspect ]]; then
   exit 1
@@ -197,22 +203,28 @@ grep -F -- '--add-host analytics:127.0.0.1 --add-host generator:127.0.0.1' "$del
 grep -F 'nginx:1.27-alpine nginx -t' "$delivery_log" >/dev/null
 grep -F 'docker compose pull proxy' "$delivery_log" >/dev/null
 grep -F 'docker compose up -d --no-build --pull never --no-recreate web' "$delivery_log" >/dev/null
+grep -F 'docker compose build cert-setup' "$delivery_log" >/dev/null
+grep -F 'docker compose run --rm cert-setup' "$delivery_log" >/dev/null
 grep -F 'docker compose up -d --no-build --pull never --no-deps --force-recreate proxy' "$delivery_log" >/dev/null
+grep -F 'docker compose pull prometheus grafana postgres-exporter node-exporter' "$delivery_log" >/dev/null
+grep -F 'docker compose up -d --no-build --pull never prometheus grafana postgres-exporter node-exporter' "$delivery_log" >/dev/null
+grep -F 'docker compose up -d --no-build --pull never --no-deps cert-renew' "$delivery_log" >/dev/null
 if grep -E 'docker compose pull (postgres|analytics|generator|web)( |$)' "$delivery_log" >/dev/null; then
   echo 'Infra delivery must not pull database or service images.' >&2
   exit 1
 fi
 
-# bootstrap-dev starts the complete currently-published service set.
+# bootstrap-dev starts the complete default Compose stack.
 grep -A 12 '^  generator:' compose.yaml | grep -F '      analytics: {condition: service_healthy}' >/dev/null
 bootstrap_dir="$temporary_dir/bootstrap"
 mkdir -p "$bootstrap_dir/scripts"
 cp scripts/bootstrap-dev.sh scripts/healthcheck.sh "$bootstrap_dir/scripts/"
 cp .env.example "$bootstrap_dir/.env"
+sed -i 's/^GRAFANA_ADMIN_PASSWORD=.*/GRAFANA_ADMIN_PASSWORD=story-1-4-test-secret/' "$bootstrap_dir/.env"
 : > "$delivery_log"
 FKIT_BI_TEST_DELIVERY_LOG="$delivery_log" FKIT_BI_DEV_PUBLIC_URL=http://dev.example.test \
   PATH="$temporary_dir/bin:$PATH" "$bootstrap_dir/scripts/bootstrap-dev.sh"
-grep -F 'docker compose up -d --no-build postgres analytics generator web proxy' "$delivery_log" >/dev/null
+grep -F 'docker compose up -d' "$delivery_log" >/dev/null
 
 # Healthchecks retry deterministically and report a failure after the bounded
 # attempt count without waiting in the test.

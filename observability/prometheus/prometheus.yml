@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+rule_files:
+  - /etc/prometheus/rules/*.yml
+scrape_configs:
+  - job_name: prometheus
+    static_configs: [{targets: ["prometheus:9090"]}]
+  - job_name: analytics
+    metrics_path: /actuator/prometheus
+    static_configs: [{targets: ["analytics:8080"]}]
+  - job_name: generator
+    metrics_path: /actuator/prometheus
+    static_configs: [{targets: ["generator:8080"]}]
+  - job_name: postgres
+    static_configs: [{targets: ["postgres-exporter:9187"]}]
+  - job_name: node
+    static_configs: [{targets: ["node-exporter:9100"]}]

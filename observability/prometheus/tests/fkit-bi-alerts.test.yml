@@ -1,0 +1,162 @@
+rule_files:
+  - ../rules/fkit-bi-alerts.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{job="analytics",instance="analytics:8080"}'
+        values: '0 0 0 0'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: PrometheusTargetDown
+        exp_alerts:
+          - exp_labels: {severity: warning, job: analytics, instance: 'analytics:8080'}
+            exp_annotations:
+              summary: "Prometheus target is down"
+              description: "Target analytics at analytics:8080 is unavailable."
+  - interval: 1m
+    input_series:
+      - series: 'fkit_bi_ingest_measurements_total{outcome="dropped"}'
+        values: '0 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: DroppedMeasurements
+        exp_alerts:
+          - exp_labels: {severity: warning, outcome: dropped}
+            exp_annotations: {summary: "Measurements were dropped"}
+  - interval: 1m
+    input_series:
+      - series: 'fkit_bi_projection_lag_seconds{projection="current_signal"}'
+        values: '31 31 31 31 31 31 31 31'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: ProjectionLagHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, projection: current_signal}
+            exp_annotations: {summary: "Current projection lag is above 30 seconds"}
+  - interval: 1m
+    input_series:
+      - series: 'fkit_bi_projection_lag_seconds{projection="minute_rollup"}'
+        values: '181 181 181 181 181 181 181 181'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: MinuteRollupLagHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, projection: minute_rollup}
+            exp_annotations: {summary: "Minute rollup lag is above 180 seconds"}
+  - interval: 1m
+    input_series:
+      - series: 'fkit_bi_dirty_oldest_age_seconds{priority="normal"}'
+        values: '301 301 301 301 301 301 301 301'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: DirtyWindowAgeHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, priority: normal}
+            exp_annotations: {summary: "Oldest dirty window is above 5 minutes"}
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{application="analytics",status="500"}'
+        values: '0 1 2 3 4 5 6 7 8 9 10'
+      - series: 'http_server_requests_seconds_count{application="analytics",status="200"}'
+        values: '0 20 40 60 80 100 120 140 160 180 200'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ApiServerErrors
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "API 5xx ratio is above 1 percent"}
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_bucket{application="analytics",uri="/api/v1/current",le="1"}'
+        values: '0 0 0 0 0 0 0 0 0 0 0'
+      - series: 'http_server_requests_seconds_bucket{application="analytics",uri="/api/v1/current",le="2"}'
+        values: '0 10 20 30 40 50 60 70 80 90 100'
+      - series: 'http_server_requests_seconds_bucket{application="analytics",uri="/api/v1/current",le="+Inf"}'
+        values: '0 10 20 30 40 50 60 70 80 90 100'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ApiLatencyHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, application: analytics, uri: /api/v1/current}
+            exp_annotations: {summary: "API p95 latency is above one second"}
+  - interval: 1m
+    input_series:
+      - series: 'hikaricp_connections_active{application="analytics"}'
+        values: '9 9 9 9 9 9 9 9'
+      - series: 'hikaricp_connections_max{application="analytics"}'
+        values: '10 10 10 10 10 10 10 10'
+      - series: 'hikaricp_connections_pending{application="analytics"}'
+        values: '0 0 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: HikariPoolPressure
+        exp_alerts:
+          - exp_labels: {severity: warning, application: analytics}
+            exp_annotations: {summary: "Hikari connection pool is under pressure"}
+  - interval: 1m
+    input_series:
+      - series: 'pg_stat_activity_count{datname="fkit_bi"}'
+        values: '9 9 9 9 9 9 9 9'
+      - series: 'pg_settings_max_connections'
+        values: '10 10 10 10 10 10 10 10'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: PostgresConnectionsHigh
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: "PostgreSQL connections exceed 80 percent of capacity"}
+  - interval: 1m
+    input_series:
+      - series: 'fkit_bi_calculation_jobs_total{job_type="recalculation",outcome="failed"}'
+        values: '0 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: CalculationJobsFailed
+        exp_alerts:
+          - exp_labels: {severity: warning, job_type: recalculation, outcome: failed}
+            exp_annotations: {summary: "A calculation job failed"}
+  - interval: 1m
+    input_series:
+      - series: 'pg_stat_database_deadlocks{datname="fkit_bi"}'
+        values: '0 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: PostgresDeadlocks
+        exp_alerts:
+          - exp_labels: {severity: warning, datname: fkit_bi}
+            exp_annotations: {summary: "PostgreSQL deadlocks increased"}
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{mountpoint="/",fstype="ext4"}'
+        values: '15 15 15 15 15 15 15 15 15 15 15 15'
+      - series: 'node_filesystem_size_bytes{mountpoint="/",fstype="ext4"}'
+        values: '100 100 100 100 100 100 100 100 100 100 100 100'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: FilesystemSpaceLow
+        exp_alerts:
+          - exp_labels: {severity: warning, mountpoint: /, fstype: ext4}
+            exp_annotations: {summary: "Filesystem free space is below 20 percent"}
+  - interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{mountpoint="/",fstype="ext4"}'
+        values: '5 5 5 5 5 5 5 5'
+      - series: 'node_filesystem_size_bytes{mountpoint="/",fstype="ext4"}'
+        values: '100 100 100 100 100 100 100 100'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: FilesystemSpaceCritical
+        exp_alerts:
+          - exp_labels: {severity: critical, mountpoint: /, fstype: ext4}
+            exp_annotations: {summary: "Filesystem free space is below 10 percent"}
+  - interval: 1m
+    input_series:
+      - series: 'fkit_bi_partition_horizon_days'
+        values: '1 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: RawPartitionHorizonLow
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: "Raw telemetry partition horizon is below two days"}

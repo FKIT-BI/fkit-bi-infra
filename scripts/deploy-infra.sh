@@ -88,6 +88,18 @@ if [[ ! -f .env ]]; then
   echo 'Dev deployment is missing its private .env file.' >&2
   exit 1
 fi
+grafana_password="$(docker compose config --environment | sed -n 's/^GRAFANA_ADMIN_PASSWORD=//p' | tail -n 1)"
+if [[ "$grafana_password" == \"*\" && "$grafana_password" == *\" ]]; then
+  grafana_password="${grafana_password:1:${#grafana_password}-2}"
+elif [[ "$grafana_password" == \'*\' && "$grafana_password" == *\' ]]; then
+  grafana_password="${grafana_password:1:${#grafana_password}-2}"
+fi
+case "$grafana_password" in
+  ''|replace-with-secret|replace-with-a-grafana-secret)
+    echo 'Dev deployment requires a non-placeholder GRAFANA_ADMIN_PASSWORD in .env.' >&2
+    exit 1
+    ;;
+esac
 env_checksum_before="$(sha256sum .env)"
 
 # The runner transfers a verified Git bundle so the Dev host needs no GitHub
@@ -117,15 +129,19 @@ git checkout --force --detach "$sha"
 [[ "$(sha256sum .env)" == "$env_checksum_before" ]] || { echo '.env was unexpectedly changed.' >&2; exit 1; }
 docker compose config --quiet
 
-# Do not pull/build images and never recreate web.  Backend services may be
-# reconciled only with their existing image references; proxy is recreated so
-# that an approved nginx change takes effect.
+# Keep application image references unchanged. Build the pinned Certbot helper,
+# then reconcile infrastructure and monitoring services; never recreate web.
+docker compose build cert-setup
+docker compose run --rm cert-setup
 docker compose up -d --no-build --pull never postgres analytics generator
 docker compose up -d --no-build --pull never --no-recreate web
 if ! docker image inspect nginx:1.27-alpine >/dev/null 2>&1; then
   docker compose pull proxy
 fi
 docker compose up -d --no-build --pull never --no-deps --force-recreate proxy
+docker compose pull prometheus grafana postgres-exporter node-exporter
+docker compose up -d --no-build --pull never prometheus grafana postgres-exporter node-exporter
+docker compose up -d --no-build --pull never --no-deps cert-renew
 printf '%s\n' "$sha" > .fkit-bi-infra-sha
 docker compose ps
 REMOTE

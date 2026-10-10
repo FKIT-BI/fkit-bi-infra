@@ -18,11 +18,12 @@ web — запросом к `/` на порту 80. Сервисный workflow 
 серверу не нужны GitHub credentials. Скрипт проверяет commit во временном git
 worktree вместе с private `.env`, затем переводит основной checkout на detached
 exact SHA; на первом запуске Git metadata создаются в существующем каталоге без
-замены `.env` и Docker volume. Скрипт не собирает и не скачивает образы, не меняет
-image references приложений и не пересоздаёт `web`; он запускает текущие сервисы и
-пересоздаёт только proxy для применения nginx. Nginx-конфигурация проверяется на
-runner; если закреплённого `nginx:1.27-alpine` ещё нет на Dev, загружается только
-этот proxy-образ. В завершение из runner проверяются
+замены `.env` и Docker volume. Скрипт собирает только закреплённый Certbot helper
+image, не собирает и не скачивает образы приложений, не меняет их references и не
+пересоздаёт `web`. Он запускает business services, observability stack и renewal
+helper; proxy пересоздаётся для применения Nginx. Nginx-конфигурация проверяется
+на runner; если закреплённого `nginx:1.27-alpine` ещё нет на Dev, загружается
+только этот proxy-образ. В завершение из runner проверяются
 `/`, `/api/analytics/actuator/health` и `/api/generator/actuator/health`.
 
 ## Первичная готовность стенда
@@ -42,7 +43,8 @@ commit SHA и delivery только изменённого сервиса. Infra
 Compose/nginx-конфигурацию по push в `develop`.
 
 Текущая проверенная точка Dev на 2026-10-04: `http://45.132.176.28:8080`.
-Это временный прямой endpoint; IP подтверждён оператором. Целевая схема сохраняет
+Это прежний временный endpoint; Story 1.4 публикует только порты 80/443 через
+Nginx, IP остаётся доступен по HTTP на порту 80. Целевая схема сохраняет
 доступ и по публичному IP, и по `bi.kitexp.ru`: домен обслуживается через Nginx на 80/443 с автоматическим
 Certbot DNS-01 для `bi.kitexp.ru` и `*.bi.kitexp.ru`; IP остаётся доступен по HTTP
 без требования HTTPS по IP. Создать только DNS A `bi.kitexp.ru -> 45.132.176.28`;
@@ -62,6 +64,40 @@ AAAA публиковать только при рабочем IPv6.
 ```bash
 FKIT_BI_DEV_PUBLIC_URL=http://host:port ./scripts/bootstrap-dev.sh
 ```
+
+### TLS и observability
+
+По умолчанию `TLS_MODE=off`: Nginx принимает HTTP на 80, TLS listener не создаётся,
+Certbot не обращается к DNS. `TLS_MODE=self-signed` создаёт certificate/key в
+persistent volume `certbot-data` в отдельном от Certbot public lineage каталоге;
+они сохраняются при перезапуске и браузеры будут
+показывать предупреждение о недоверенном сертификате. `TLS_MODE=public` запрашивает
+SAN `bi.kitexp.ru` и `*.bi.kitexp.ru` через Certbot DNS-01 и Yandex Cloud DNS.
+При обновлении старой установки unmanaged certificate из прежнего public lineage
+текущие certificate и key сохраняются отдельными обычными файлами в `self-signed`
+перед перемещением старого каталога с относительными Certbot-ссылками.
+
+Для public mode задайте `CERTBOT_EMAIL`, `DNS_ZONE_ID`, `YANDEX_SERVICE_ACCOUNT_ID`,
+`YANDEX_KEY_ID`, `YANDEX_SERVICE_ACCOUNT_KEY_FILE` и `DNS_RECORD_NAME` в private
+`.env`. Ключ service account храните вне Git; выдайте ему только `dns.editor` для
+целевой зоны. При отсутствии сертификата ошибка ACME/DNS останавливает Nginx; при
+ошибке renewal предыдущий certificate остаётся на месте, сообщение пишется в лог,
+следующая проверка повторяется через 12 часов. Auth/cleanup hooks используют
+Yandex Cloud DNS REST API и удаляют только значение challenge, созданное текущим
+запросом. `./scripts/validate.sh` запускает mock DNS tests без production
+credentials, проверяет HTTP/TLS маршруты через Nginx в режимах `off`,
+`self-signed` и `public`, а также кратковременно поднимает отдельный Compose smoke
+stack с тестовой БД и образами приложений. Smoke test проверяет scrape targets,
+datasource и шесть dashboards, затем по очереди останавливает Prometheus и Grafana
+и проверяет readiness, metrics endpoint и login API. Тестовые контейнеры и volumes
+удаляются после выполнения; production DNS и ACME не используются.
+
+Задайте в private `.env` непустой `GRAFANA_ADMIN_PASSWORD`, отличный от placeholder
+из `.env.example`; bootstrap и delivery отклоняют известные placeholder-значения.
+Grafana публикуется только на `127.0.0.1:${GRAFANA_PORT:-3000}`; подключайтесь через
+SSH tunnel. Prometheus и exporters доступны только внутри Compose network. Compose
+provisioning создаёт datasource, шесть dashboards и alert rules. Остановка
+Prometheus или Grafana не является readiness-зависимостью Analytics/Generator.
 
 При ошибке сохраните диагностические данные командой `docker compose ps` и
 `docker compose logs --tail=100 <service>`. Восстанавливайте только известную
