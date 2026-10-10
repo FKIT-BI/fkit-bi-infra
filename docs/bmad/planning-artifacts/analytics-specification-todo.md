@@ -75,17 +75,17 @@
 
 ## Definition of Done аналитической фазы
 
-- [ ] Все пункты этого TODO либо закрыты, либо явно вынесены за границы MVP.
-- [ ] Для каждой сущности определены назначение, поля, типы, обязательность, связи, уникальность и жизненный цикл.
-- [ ] Для каждого пользовательского потока определены основной сценарий, альтернативы, ошибки и результат.
-- [ ] Формулы показателей однозначны и проверены на числовых примерах.
-- [ ] Определены event time, актуальность, late data, history backfill и future scheduling.
-- [ ] Определены исходные, производные и агрегированные данные, их владельцы и сроки хранения.
-- [ ] Определены транзакционные границы и правила идемпотентности.
-- [ ] Сформированы итоговые SQL-модель и OpenAPI-контракты analytics и generator.
-- [ ] Определены нефункциональные требования и нагрузочный профиль MVP.
-- [ ] Сформированы критерии приёмки, тестовые сценарии и трассировка требований.
-- [ ] Набор блочных спецификаций проверен как единое целое и готов к декомпозиции на epics/stories.
+- [x] Все пункты этого TODO либо закрыты, либо явно вынесены за границы MVP.
+- [x] Для каждой сущности определены назначение, поля, типы, обязательность, связи, уникальность и жизненный цикл.
+- [x] Для каждого пользовательского потока определены основной сценарий, альтернативы, ошибки и результат.
+- [x] Формулы показателей однозначны и проверены на числовых примерах.
+- [x] Определены event time, актуальность, late data, history backfill и future scheduling.
+- [x] Определены исходные, производные и агрегированные данные, их владельцы и сроки хранения.
+- [x] Определены транзакционные границы и правила идемпотентности.
+- [x] Сформированы SQL-модель и OpenAPI-контракты Analytics и Generator.
+- [x] Определены нефункциональные требования и нагрузочный профиль MVP.
+- [x] Сформированы критерии приёмки, тестовые сценарии и трассировка требований.
+- [x] Набор блочных спецификаций проверен как единое целое и готов к декомпозиции на epics/stories.
 
 ---
 
@@ -160,14 +160,15 @@
 
 ## B02. Одна PostgreSQL и логические области данных
 
-Статус: `DECIDED`, transaction boundaries согласованы; backup/restore остаётся deployment readiness task.
+Статус: `DECIDED`, включая MVP backup/restore и безопасное удаление raw-партиций.
 
 - [x] Утвердить логические схемы PostgreSQL либо отказаться от схем в пользу префиксов таблиц.
 - [x] Определить владельца Liquibase и порядок применения миграций.
 - [x] Определить роли БД и разрешения analytics/generator.
 - [x] Cross-schema транзакции разрешены только для явно описанных atomic use cases; сетевых вызовов внутри транзакции нет.
 - [x] Определить правила ссылочной целостности между core, telemetry, analytics, incidents и generator.
-- [ ] Определить стратегию backup/restore и удаления старых raw-партиций для MVP.
+- [x] Backup: ежедневный PostgreSQL custom-format dump, 7 локальных копий, RPO ≤24 ч, целевое ручное восстановление ≤4 ч; без PITR/HA. Restore drill — обязательная проверка до выпуска, но не блок аналитического проектирования.
+- [x] Raw retention: удалять только целые UTC-партиции старше 90 суток, когда их верхняя граница истекла и нет ссылающейся незавершённой dirty work; поддерживать партиции на 7 дней вперёд. DDL/cleanup не включать в ingestion transaction.
 
 Результат: data ownership matrix и правила доступа к БД.
 
@@ -177,7 +178,7 @@
 
 ## P02. Иерархия оборудования
 
-Статус: `DECIDED`, требуется детализация.
+Статус: `DECIDED`, модель, кардинальности, правила назначения и инварианты зафиксированы.
 
 Уже принято: Enterprise владеет линиями и машинами; свободная Machine может быть однократно назначена ProductionLine; Machine владеет деревом Component и сигналами.
 
@@ -188,7 +189,7 @@
 - [x] Не выполнять физическое удаление; восстановление выполняется переводом из `DISABLED` в `ACTIVE` после проверки.
 - [x] Представлять Sensor и Instrument значениями `Component.kind`, а не отдельными сущностями.
 
-Результат: ER-модель оборудования и список инвариантов.
+Результат: `docs/bmad/specs/spec-equipment-hierarchy/` и `spec-equipment-identity-lifecycle/`.
 
 ## P03. `ACTIVE` / `DISABLED`
 
@@ -570,7 +571,7 @@
 
 ## P16. Generator domain и режимы запуска
 
-Статус: `DECIDED`, домен и execution semantics согласованы; требуется перенос в OpenAPI.
+Статус: `DECIDED`, домен, execution semantics и публичный контракт согласованы.
 
 Уже принято: generator отдельный; поддерживает REALTIME, HISTORICAL и SCHEDULED; пишет сырые сигналы.
 
@@ -651,7 +652,7 @@
 
 ## J20. Управление генерацией
 
-Статус: `DECIDED`, Scenario и run-mode flows согласованы; требуется перенос в OpenAPI.
+Статус: `DECIDED`, Scenario, run-mode flows и frontend-facing Generator API согласованы.
 
 - [x] Описать создание disabled Scenario, validation и activation.
 - [x] Описать realtime run с bounded/unbounded execution и skipped overdue ticks.
@@ -760,12 +761,14 @@
 
 ## L04. Наблюдаемость
 
-Статус: `DECIDED`, metrics/runtime часть согласована; structured logs остаются отдельной детализацией реализации.
+Статус: `DECIDED`, metrics, runtime, JSON structured logs и correlation IDs согласованы.
 
 - [x] Включить Prometheus, Grafana, postgres_exporter и node_exporter в стандартный Compose startup.
 - [x] Определить health/readiness и независимость business services от observability.
 - [x] Определить metrics: ingestion/generation, processing lag, dirty backlog, jobs, failures, API, PostgreSQL и host.
-- [ ] Детализировать structured logs и correlation IDs при проектировании реализации.
+- [x] Логировать JSON Lines в stdout с timestamp, level, service, event, traceId и message; возвращать `X-Trace-Id` и тот же ID в error response.
+- [x] Передавать correlationId в durable async work; jobId/runId/machineId — структурированные поля, не metric labels.
+- [x] Не логировать passwords, bearer/JWT, signing key, DB credentials и raw telemetry values; ограничивать внешние строки.
 - [x] Определить alerts для target health, dropped telemetry, lag, backlog, API, connection и disk pressure.
 - [x] Определить operational endpoints ручного перерасчёта в analytics API contract; execution metrics входят в observability.
 
@@ -790,57 +793,56 @@
 
 ## M01. Acceptance criteria и примеры
 
-Статус: `OPEN`.
+Статус: `DECIDED`, executable acceptance examples вынесены в companion catalog.
 
-- [ ] Для каждой команды определить Given/When/Then.
-- [ ] Для каждой формулы подготовить числовой пример.
-- [ ] Для state rules подготовить timeline examples.
-- [ ] Для late/history/future подготовить event-time examples.
-- [ ] Для status hierarchy подготовить validation examples.
+- [x] Для основных пользовательских команд заданы Given/When/Then и связи с OpenAPI operation groups.
+- [x] Числовые формулы имеют точные ожидаемые значения.
+- [x] State rules имеют timeline с effective time и worker detection time.
+- [x] Late data, historical replay и future scheduling имеют event-time acceptance cases.
+- [x] Иерархия ACTIVE/DISABLED и назначение машины линии имеют validation examples.
 
-Результат: executable acceptance catalog.
+Результат: `spec-mvp-acceptance-strategy/acceptance-catalog.md` и `operation-traceability.md`.
 
 ## M02. Стратегия тестирования
 
-Статус: `OPEN`.
+Статус: `DECIDED`, полный тестовый план и release evidence определены.
 
-- [ ] Unit tests чистых rule/metric calculators.
-- [ ] Property tests непересекающихся intervals и сохранения длительности.
-- [ ] Integration tests PostgreSQL constraints и migrations.
-- [ ] Golden datasets generator → telemetry → intervals → metrics.
-- [ ] Contract tests OpenAPI.
-- [ ] Load tests realtime и historical backfill.
-- [ ] Recovery tests после падения calculation.
+- [x] Определены unit/property test cases для rule, intervals, time, metrics, aggregation и deterministic generation.
+- [x] Определены PostgreSQL/Testcontainers проверки constraints, migrations, rollback, MVCC publication и concurrency.
+- [x] Определены golden flow Generator → raw telemetry → intervals → metrics → API.
+- [x] OpenAPI contract test inventory охватывает все 77 operationId Analytics (63), Generator (12) и Auth (2), с явным маппингом к acceptance/test layers.
+- [x] Нагрузочные тесты realtime, burst, concurrent reads и historical backfill заданы по существующим SLO.
+- [x] Recovery checks покрывают сбои после commit, во время staging и повторную обработку durable work.
 
-Результат: test strategy.
+Результат: `spec-mvp-acceptance-strategy/test-strategy.md`.
 
 ## M03. Финальная согласованность документов
 
-Статус: `OPEN`.
+Статус: `DECIDED`, cross-document reconciliation выполнен; детали вынесены в readiness/traceability package.
 
-- [ ] Обновить исходные architecture/components documents.
-- [ ] Удалить устаревшие противоречия.
-- [ ] Синхронизировать SQL, OpenAPI и glossary.
-- [ ] Проверить traceability requirements → model → API → tests.
-- [ ] Зафиксировать оставшийся technical debt MVP.
+- [x] Архитектура и components синхронизированы с текущими module/application boundaries и background read-model behavior.
+- [x] Удалены устаревшие утверждения об automatic incident discovery, query-time calculation, draft contract status и ещё не созданном Generator API.
+- [x] SQL ownership/migrations, OpenAPI versions, time/shift glossary и processing semantics сверены с соответствующими пакетами.
+- [x] Traceability requirements → domain spec/SQL → API operation → acceptance/test зафиксирована в `spec-mvp-acceptance-strategy/operation-traceability.md` и acceptance catalog.
+- [x] Явный MVP technical debt/out-of-scope перечень сохранён в source specs и implementation roadmap.
 
-Результат: единый непротиворечивый planning package.
+Результат: architecture spine, API/SQL specs, `analytics-design-notes.md` и единый acceptance/readiness package.
 
 ## M04. Сборка итоговой спецификации
 
-Статус: `OPEN`.
+Статус: `DECIDED`, спецификация и implementation roadmap сформированы; design-readiness пройден.
 
-- [ ] Сформировать подробный документ спецификации из закрытых решений.
-- [ ] Провести validation спецификации.
-- [ ] Сформировать architecture spine.
-- [ ] Разбить работу на epics и stories.
-- [ ] Провести implementation readiness check.
+- [x] Сформирован компактный итоговый acceptance/readiness package, связанный с авторитетными спецификациями.
+- [x] Проведена cross-document consistency и contract-path validation.
+- [x] Architecture spine актуализирован и указывает на канонические модульные и contract specs.
+- [x] Сформирован implementation roadmap с эпиками, story outcomes, зависимостями и owning repo.
+- [x] Design-readiness check пройден; незапущенные CI/load/restore/deployment checks честно оставлены release/implementation gates.
 
-Результат: утверждённая спецификация, готовая к планированию реализации.
+Результат: `spec-mvp-acceptance-strategy/`, implementation roadmap и design-readiness gate, готовый к старту implementation после фиксации planning changes.
 
 ---
 
-# Рекомендуемый порядок прохождения
+# Исторический порядок проработки
 
 1. `A01–A04` — scope, actors, glossary, нагрузка.
 2. `P02–P09` и `C10` — доменная модель оборудования.
@@ -856,8 +858,4 @@
 12. `L01–L05` — надёжность и эксплуатация.
 13. `M01–M04` — проверка, финализация и декомпозиция.
 
-# Первая рабочая сессия
-
-Рекомендуемый старт: `A01. Границы MVP и результат демонстрации`.
-
-Причина: без точного MVP мы рискуем одинаково подробно проектировать обязательные функции и будущие возможности. После A01 сразу переходим к `A02` и `A03`, затем фиксируем нагрузочный профиль `A04`, поскольку он влияет на SQL telemetry contract и rollup.
+Все перечисленные блоки пройдены; следующий шаг — начать реализацию по `spec-mvp-acceptance-strategy/implementation-roadmap.md` после фиксации planning changes.

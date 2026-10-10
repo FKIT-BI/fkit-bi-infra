@@ -1,6 +1,6 @@
 # FKIT BI — рабочие заметки по проектированию аналитики
 
-Статус: черновик для обсуждения. Документ фиксирует согласованные решения и отделяет их от предложений, которые ещё предстоит утвердить.
+Статус: сводка принятых решений. Канонические требования, SQL и API находятся в связанных `docs/bmad/specs/` и `docs/contracts/`; этот документ — навигационный конспект, а не альтернативный источник правил.
 
 ## Зафиксированные решения
 
@@ -41,7 +41,7 @@
 - Долгий replay пишет validated staging; active range, current projection и checkpoints подменяются короткой транзакцией, пока frontend читает старый committed результат.
 - Ближайшие stale/delay/offline transitions хранятся одной строкой `machine_evaluation_deadline` на Machine и выполняются PostgreSQL worker с lease/`SKIP LOCKED`, без внешнего broker.
 - Пользовательский state recalculation асинхронно принимает `PERIOD` или `ALL`; изменение rules пересчитывает current, а исторический период выбирает пользователь и он использует текущие rules.
-- Analytics HTTP API зафиксирован отдельным OpenAPI 3.1 в `fkit-bi-analytics/docs/contracts/analytics-api-draft.yaml`; SQL-контракт телеметрии и OpenAPI генератора проектируются отдельно.
+- Analytics HTTP API зафиксирован OpenAPI 3.1 v1.0.0 в `fkit-bi-analytics/docs/contracts/analytics-api-draft.yaml`; SQL-контракт raw telemetry и Generator OpenAPI также сформированы и описаны companion specs.
 - `fkit-bi-analytics/docs/contracts/draft-api.yaml` используется как пример пользовательских сценариев и требуемых представлений данных, но не ограничивает проектируемую доменную модель. Пути, операции и DTO могут быть изменены, добавлены или удалены; итоговый OpenAPI формируется после согласования домена и расчётов, а Web-клиент адаптируется к нему.
 - Правила определения состояний должны быть декларативными.
 - Для каждой Machine хранится одна текущая `MachineStateConfig` без версий: `defaultState`, `offlineAfterMs` и до 20 StateRule в валидированном JSONB; PUT заменяет её атомарно, runtime использует скомпилированную типизированную модель.
@@ -92,7 +92,7 @@
 - Telemetry batch, header/hash, raw rows, signal usage и recalculation hints остаются одной короткой transaction с packet-level idempotency.
 - Replay и durable staging выполняются вне publication transaction. Короткий publication commit заменяет полный затронутый диапазон, обновляет projection currency и завершает work/job/checkpoint вместе; readers видят старую или новую версию целиком.
 - Фоновые шаги допускают at-least-once retry и выполняют replace/upsert, а не повторное прибавление; staging после crash можно пересобрать из raw и durable work.
-- Открытый вопрос для финальной API-сверки: нужен ли `Idempotency-Key` на POST создания ManualIncident при потере ответа клиентом.
+- `POST` ManualIncident использует `Idempotency-Key`; повтор того же ключа и payload возвращает исходный результат, несовпадающий payload — conflict.
 
 ## Конкурентность
 
@@ -163,7 +163,7 @@
 6. Получение исходной телеметрии и расчёт текущего состояния.
 7. Построение интервалов, агрегатов и ручная классификация потерь.
 8. Выдача текущих и исторических данных Web-клиенту.
-Analytics API покрывает пункты 1–8 отдельными configuration, operations, analytics, incident и recalculation operations. Пункт 9 относится к отдельному Generator OpenAPI и остаётся следующим самостоятельным блоком.
+Analytics API покрывает пункты 1–8 отдельными configuration, operations, analytics, incident и recalculation operations. Generator flows и отдельный versioned Generator API для Scenario/Run также спроектированы; генерация raw telemetry остаётся внутренней через `TelemetrySink`.
 
 ## Базовые правила агрегирования
 
@@ -181,7 +181,8 @@ Analytics API покрывает пункты 1–8 отдельными configu
 - Reason применяется к effective IDLE/DOWN/SETUP/PLANNED_STOP и игнорирует RUN/OFFLINE. Ongoing reason продолжает классифицировать новые eligible intervals до close.
 - Incident поддерживает update/close/idempotent soft cancel; полный audit, restore, multiple simultaneous causes и automatic reason detection не входят в MVP.
 
-## Открытые решения
+## Закрытые сквозные решения и оставшиеся проверки
 
-- Границы допустимого повторного расчёта после изменения правил и конфигурации; в MVP используются текущие правила.
-- Формат structured logs и правила correlation ID при реализации observability.
+- История после изменения правил не меняется автоматически; явный PERIOD/ALL replay использует текущую конфигурацию и правила.
+- Логи — JSON Lines в stdout; server-generated trace ID возвращается в `X-Trace-Id` и error body; фоновые jobs наследуют correlation ID.
+- Перед implementation остаются не доменные решения, а evidence gates: CI/integration tests, нагрузочный benchmark, restore drill и deployment/TLS проверка. Они перечислены в `spec-mvp-acceptance-strategy/implementation-readiness.md`.

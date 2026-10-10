@@ -1,6 +1,6 @@
 # FKIT BI: компоненты демо и границы репозиториев
 
-Предлагаемая архитектура: два отдельных Spring-приложения, Web-клиент, одна PostgreSQL и обязательный лёгкий observability stack. Генератор пишет телеметрию напрямую через JDBC. Kafka и ETL отложены.
+Архитектура MVP: два отдельных модульных Spring-приложения (Analytics и Generator), Web-клиент, одна PostgreSQL и обязательный лёгкий observability stack. Генератор пакетно пишет raw measurements напрямую через JDBC; Analytics непрерывно строит read projections, которые HTTP API синхронно отдаёт без расчёта на запросе. Kafka и ETL отложены. Подробные контракты и данные — в `docs/bmad/specs/`.
 
 ## 1. Уровень сервисов
 
@@ -129,18 +129,18 @@ flowchart TB
 | Структура и настройки оборудования | Сервис аналитики | Аналитика и генератор |
 | Исходная телеметрия | Генератор: только новые измерения | Сервис аналитики |
 | Агрегаты | Расчётный модуль аналитики | API аналитики |
-| Инциденты и ручные сведения | Модуль инцидентов аналитики | API аналитики |
+| Инциденты и ручные сведения | Только ручные команды сотрудников через модуль инцидентов Analytics | API аналитики |
 | Сценарии и состояния запусков | Генератор | API генератора |
 
 Предприятие напрямую владеет производственными линиями и станками. Станок может быть свободным до однократного назначения линии своего предприятия и владеет деревом компонентов. Датчик, прибор и инструмент представлены видом компонента. Сигнал всегда принадлежит станку и может дополнительно ссылаться на компонент той же машины.
 
-Для демо предлагается один владелец миграций: `fkit-bi-analytics`. Он хранит миграции всех областей общей базы, включая таблицы запусков генератора. В `fkit-bi-infra` находится только их запуск: миграции применяются одним процессом до запуска обоих приложений. Это предотвращает конкурирующее управление одной схемой.
+Для демо утверждён один владелец Liquibase: `fkit-bi-analytics`. Он хранит миграции всех областей общей базы, включая таблицы запусков генератора. Liquibase применяет миграции при старте Analytics; Generator запускается после Analytics readiness и проверяет `equipment.schema_release`. В `fkit-bi-infra` находится конфигурация запуска. Это предотвращает конкурирующее управление одной схемой.
 
 Контракт телеметрии версионируется рядом с миграциями в `fkit-bi-analytics/docs/contracts`: таблицы, поля, типы, идентификаторы, время измерения, качество, правила пакетной записи и защиты от дублей. Генератор реализует согласованную версию контракта. Отдельный репозиторий общей Java-библиотеки для первой демоверсии не требуется.
 
-Публичная HTTP-граница аналитики определена OpenAPI 3.1 v1.0.0 `fkit-bi-analytics/docs/contracts/analytics-api-draft.yaml`. Web генерирует из него типизированный client; backend может генерировать Spring transport interfaces/DTO и отображает их в собственные application/domain models. Raw telemetry ingestion и управление generator не входят в этот документ.
+Публичная HTTP-граница аналитики определена OpenAPI 3.1 v1.0.0 `fkit-bi-analytics/docs/contracts/analytics-api-draft.yaml`. Несмотря на историческое имя `draft`, контракт v1 нормативен согласно contract spec. Web генерирует из него типизированный client; backend может генерировать Spring transport interfaces/DTO и отображает их в собственные application/domain models. Raw telemetry ingestion и управление generator не входят в этот документ.
 
-Публичная HTTP-граница генератора определена OpenAPI 3.1 v1.0.0 `fkit-bi-generator/docs/contracts/generator-api-draft.yaml`. Она содержит только Scenario validation/configuration и GenerationRun validation/control; equipment выбирается через Analytics API, а raw measurements передаются внутренним `TelemetrySink`.
+Публичная HTTP-граница генератора определена OpenAPI 3.1 v1.0.0 `fkit-bi-generator/docs/contracts/generator-api-draft.yaml`. Несмотря на историческое имя `draft`, контракт v1 нормативен согласно contract spec. В нём только Scenario validation/configuration и GenerationRun validation/control; equipment выбирается через Analytics API, а raw measurements передаются внутренним `TelemetrySink`.
 
 Общий контракт входа и создания пользователей — `fkit-bi-infra/docs/contracts/auth-api.yaml`. Analytics выпускает JWT, Generator его проверяет; все business APIs используют общий Bearer scheme.
 
