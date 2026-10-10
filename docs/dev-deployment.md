@@ -45,8 +45,11 @@ Compose/nginx-конфигурацию по push в `develop`.
 Это временный прямой endpoint; IP подтверждён оператором. Целевая схема сохраняет
 доступ и по публичному IP, и по `bi.kitexp.ru`: домен обслуживается через Nginx на 80/443 с автоматическим
 Certbot DNS-01 для `bi.kitexp.ru` и `*.bi.kitexp.ru`; IP остаётся доступен по HTTP
-без требования HTTPS по IP. Создать DNS A для `bi.kitexp.ru` и wildcard `*.bi.kitexp.ru`,
-обе записи направить на `45.132.176.28`; DNS не задаёт порт. На cloud firewall/security
+без требования HTTPS по IP. Создать только DNS A `bi.kitexp.ru -> 45.132.176.28`;
+отдельные `api.bi.kitexp.ru`, `generator.bi.kitexp.ru` и wildcard A не нужны,
+поскольку API идут по путям одного host. Certbot DNS-01 автоматически создаёт
+временную TXT-запись `_acme-challenge.bi.kitexp.ru` через Yandex Cloud DNS API.
+DNS не задаёт порт. На cloud firewall/security
 group разрешить входящий TCP 80 и 443 на этот сервер; не открывать наружу 8080/5432.
 AAAA публиковать только при рабочем IPv6.
 Конфигурация сервера — `/opt/fkit-bi/.env`
