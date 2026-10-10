@@ -50,7 +50,7 @@ flowchart LR
 
 - **Binds:** Все хранимые домены MVP.
 - **Prevents:** Отдельные модули создают конфликтующие таблицы в `public` или преждевременно требуют распределённых транзакций.
-- **Rule:** Доменные таблицы располагаются только в `equipment`, `telemetry`, `analytics`, `incident` или `generator`; MVP использует одну физическую PostgreSQL.
+- **Rule:** Доменные таблицы располагаются в логических схемах `equipment`, `telemetry`, `analytics`, `incident`, `generator` или `identity`; учётные записи принадлежат `identity`, миграции всех схем выполняет только Analytics, а MVP использует одну физическую PostgreSQL.
 
 ### AD-2 — [ADOPTED] Единственный владелец DDL
 

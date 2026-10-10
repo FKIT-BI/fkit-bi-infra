@@ -48,6 +48,7 @@ flowchart TB
 
     subgraph BACK["fkit-bi-analytics — Spring-приложение"]
         direction TB
+        BAUTH["Аутентификация: пользователи, BCrypt и выпуск JWT"]
         BA["REST API: структура, аналитика, инциденты"]
         BS["Структура оборудования и настройки"]
         BQ["Запросы текущего состояния и истории"]
@@ -67,6 +68,7 @@ flowchart TB
 
     subgraph GEN["fkit-bi-generator — Spring-приложение"]
         direction TB
+        GJWT["Resource server: проверка общего JWT"]
         GA["REST API: сценарии и запуски"]
         GR["Управление запуском, остановкой и прогрессом"]
         GC["Чтение и фиксация конфигурации запуска"]
@@ -91,10 +93,13 @@ flowchart TB
         DA[("Агрегаты аналитики")]
         DI[("Инциденты и ручные сведения")]
         DG[("Сценарии и запуски генератора")]
+        DIAM[("identity: пользователи")]
     end
 
     WC -->|"HTTP"| BA
     WC -->|"HTTP"| GA
+    WC -->|"Login / создание пользователей"| BAUTH
+    GJWT -->|"Защита API генератора"| GA
 
     BS -->|"CRUD"| DC
     BR -->|"SELECT"| DT
@@ -103,6 +108,7 @@ flowchart TB
     BQ -->|"SELECT"| DI
     BQ -->|"Чтение структуры и настроек"| BS
     BI -->|"Чтение и запись"| DI
+    BAUTH -->|"Учётные записи и признак bootstrap"| DIAM
 
     GC -->|"SELECT"| DC
     GR -->|"Сценарии, состояния и прогресс запусков"| DG

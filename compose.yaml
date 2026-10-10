@@ -20,6 +20,8 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       FKIT_BI_GIT_SHA: ${GIT_SHA}
+      FKIT_JWT_SECRET: ${FKIT_JWT_SECRET}
+      FKIT_TRUSTED_PROXY_CIDRS: ${FKIT_TRUSTED_PROXY_CIDRS:-${PROXY_CONTAINER_IP:-172.29.0.2}/32}
     depends_on:
       postgres: {condition: service_healthy}
     healthcheck: {test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/readiness"], interval: 10s, timeout: 3s, retries: 12}
@@ -31,6 +33,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       FKIT_BI_GIT_SHA: ${GIT_SHA}
+      FKIT_JWT_SECRET: ${FKIT_JWT_SECRET}
     depends_on:
       postgres: {condition: service_healthy}
       analytics: {condition: service_healthy}
@@ -44,9 +47,27 @@ services:
     restart: unless-stopped
   proxy:
     image: nginx:1.27-alpine
+    networks:
+      default:
+        ipv4_address: ${PROXY_CONTAINER_IP:-172.29.0.2}
     ports: ["${PUBLIC_PORT}:80"]
     volumes: [./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro]
     depends_on: {web: {condition: service_started}}
     restart: unless-stopped
+  analytics-bootstrap:
+    extends:
+      service: analytics
+    command: ["bootstrap-user"]
+    environment:
+      FKIT_BOOTSTRAP_USERNAME: ${FKIT_BOOTSTRAP_USERNAME:-}
+      FKIT_BOOTSTRAP_DISPLAY_NAME: ${FKIT_BOOTSTRAP_DISPLAY_NAME:-}
+      FKIT_BOOTSTRAP_PASSWORD: ${FKIT_BOOTSTRAP_PASSWORD:-}
+    profiles: ["bootstrap"]
+    restart: "no"
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${COMPOSE_SUBNET:-172.29.0.0/24}
 volumes:
   postgres-data:

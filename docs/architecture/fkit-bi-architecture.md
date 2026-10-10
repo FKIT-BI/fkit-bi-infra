@@ -12,6 +12,7 @@ flowchart TB
 
     subgraph BI["Сервис аналитики — Spring-приложение"]
         direction TB
+        AUTH["Аутентификация: login, bootstrap-only users, выпуск JWT"]
         MC["Machine controller"] --> MS["Machine service: структура и настройки"]
         AC["Analytics controller"] --> CALC["Calculate service: показатели и временная линия"]
         AC --> RAW["Raw data service: чтение измерений"]
@@ -22,6 +23,7 @@ flowchart TB
 
     subgraph SIM["Сервис генерации — Spring-приложение"]
         direction TB
+        JWT["JWT resource-server validation"]
         GC["API управления генерацией"] --> RUN["Управление сценариями и запусками"]
         RUN --> ENGINE["Движок симуляции оборудования"]
         ENGINE --> BUFFER["Ограниченный буфер"]
@@ -34,6 +36,7 @@ flowchart TB
         TEL[("Исходная телеметрия")]
         AGG[("Результаты аналитики")]
         INC[("Инциденты и сведения сотрудников")]
+        IDN[("Учётные записи identity")]
     end
 
     W -->|"CRUD оборудования и настроек"| MC
@@ -46,6 +49,9 @@ flowchart TB
     RAW -->|"SELECT"| TEL
     CALC -->|"Чтение и запись агрегатов"| AGG
     IS -->|"Чтение и запись"| INC
+    AUTH -->|"Users и bootstrap marker"| IDN
+    W -->|"Login и создание пользователей"| AUTH
+    JWT -->|"Проверка общего токена"| GC
 
     subgraph FUTURE["Будущая интеграция — вне демо"]
         BUS["Внешняя шина: протокол не выбран"]
