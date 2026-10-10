@@ -1,0 +1,93 @@
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates the next story after the previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; the status view surfaces open ones
+generated: 10-10-2026 20:45
+last_updated: 10-10-2026 20:45
+project: fkit-bi
+project_key: NOKEY
+tracking_system: file-system
+story_location: fkit-bi-infra/docs/bmad/implementation-artifacts
+development_status:
+  epic-1: backlog
+  1-1-application-foundations: backlog
+  1-2-postgresql-migration-ownership: backlog
+  1-3-authentication: backlog
+  1-4-public-edge-and-observability: backlog
+  1-5-backup-and-restore-operations: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-enterprise-and-shift-calendar: backlog
+  2-2-lines-and-machine-assignment: backlog
+  2-3-component-and-signal-configuration: backlog
+  2-4-machine-state-configuration: backlog
+  2-5-configuration-journey: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-raw-schema-and-partition-lifecycle: backlog
+  3-2-telemetry-writer: backlog
+  3-3-ingestion-to-work-handoff: backlog
+  3-4-signal-current-projection: backlog
+  3-5-state-evaluation-and-deadlines: backlog
+  3-6-realtime-golden-slice: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-calculation-queue-and-publication: backlog
+  4-2-minute-rollups: backlog
+  4-3-metric-calculator: backlog
+  4-4-current-and-overview-reads: backlog
+  4-5-historical-series-pareto-chronometry: backlog
+  4-6-explicit-replay-jobs: backlog
+  4-7-late-data-acceptance: backlog
+  epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-loss-reason-catalog: backlog
+  5-2-manual-incident-lifecycle: backlog
+  5-3-loss-projections-and-ui-reads: backlog
+  5-4-incident-golden-tests: backlog
+  epic-5-retrospective: optional
+
+  epic-6: backlog
+  6-1-scenario-api-and-storage: backlog
+  6-2-immutable-run-snapshot: backlog
+  6-3-realtime-execution: backlog
+  6-4-historical-and-scheduled-execution: backlog
+  6-5-generator-acceptance: backlog
+  epic-6-retrospective: optional
+
+  epic-7: backlog
+  7-1-contract-and-regression-ci: backlog
+  7-2-performance-benchmark: backlog
+  7-3-failure-and-recovery-verification: backlog
+  7-4-demo-rehearsal: backlog
+  epic-7-retrospective: optional
