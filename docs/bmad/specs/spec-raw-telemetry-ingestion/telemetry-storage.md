@@ -47,7 +47,7 @@ telemetry.raw_partition_registry
 
 Ровно одна `value_*` колонка заполнена. Логический `receivedAt` измерения читается из batch header и не дублируется в каждой строке.
 
-`signal_usage` имеет одну неистекающую строку на использованный Signal:
+`signal_usage` переиспользует таблицу, созданную вместе с каталогом сигналов, и имеет одну неистекающую строку на использованный Signal:
 
 ```text
 signal_id UUID PRIMARY KEY REFERENCES equipment.telemetry_signal(id)
@@ -56,6 +56,11 @@ first_received_at TIMESTAMPTZ(3) NOT NULL
 ```
 
 Она сохраняет необратимый факт первого raw после удаления суточных partitions. Writer в стабильном порядке берёт shared transaction advisory lock, производный от каждого `signal_id`, сверяет snapshot с текущей семантикой и выполняет `INSERT ... ON CONFLICT DO NOTHING`. Изменение смысловых полей Signal берёт соответствующий exclusive transaction advisory lock и допускается только при отсутствии `signal_usage`. Advisory key детерминированно извлекается общей функцией из UUID; коллизия лишь сериализует две независимые операции и не ослабляет проверку.
+
+При установке поверх старой схемы `first_used_at` сохраняется для совместимости;
+новые поля получают его прежнее значение как безопасную миграционную оценку.
+После миграции все новые записи должны задавать обе временные метки фактическими
+значениями первого принятого измерения.
 
 `recalculation_hint` сохраняется в той же транзакции, что header и raw, по одной строке на затронутую Machine:
 
@@ -111,5 +116,20 @@ Retention получает exclusive per-day `pg_try_advisory_xact_lock`; при
 Дополнительные индексы вводятся только после измеренного query plan. Обычный frontend не читает raw; диагностическая выборка всегда ограничена `signalId`, `from`, `to` и максимальным числом точек.
 
 Liquibase устанавливает partition routines с фиксированным `search_path`, проверкой date range и общим topology advisory lock. Analytics вызывает create/detach с короткими `lock_timeout`/`statement_timeout` и bounded retry. MVP использует обычный detach: если DDL lock нельзя получить в заданный короткий timeout, транзакция отменяется и retention откладывается; `DETACH CONCURRENTLY` и отдельный maintenance process не вводятся.
+
+Analytics release 007 устанавливает `telemetry.create_raw_partition(date)`,
+`telemetry.ensure_raw_partition_window()`, `telemetry.raw_partition_day_lock_key(date)`,
+`telemetry.raw_partition_has_retention_blocker(date)` и
+`telemetry.retire_raw_partition(date)`. Создание ограничено диапазоном от UTC today−89
+до today+7 и координируется topology lock плюс exclusive day lock. Writer должен
+брать shared day lock через `pg_try_advisory_xact_lock_shared()` и проверять `ACTIVE`;
+это возвращает retryable contention вместо ожидания. Lifecycle routines являются
+maintenance API и не вызываются из транзакции записи.
+
+`raw_partition_has_retention_blocker(date)` — обязательная точка расширения для
+durable work из последующих историй. Release 007 проверяет unconsumed hints; когда
+появятся таблицы jobs, leases и publication, их блокировки должны быть добавлены
+сюда до включения соответствующей очистки. Отсутствующие будущие таблицы не
+упоминаются в migration SQL и потому не ломают чистую установку.
 
 Raw хранится 90 суток по времени PostgreSQL. Удаляется только полностью истёкшая UTC-day partition в `RETIRING` и только если нет unconsumed hint, queued/running/retryable dirty или full-recalculation job, worker lease и неопубликованной зависимой проекции. Failed job остаётся retention-blocking до явного решения. Read API обслуживается из projections и не участвует в lock barrier; запросы, непосредственно читающие raw, могут кратко конфликтовать с обычным detach, поэтому DDL ограничен `lock_timeout` и будет отложен при таком конфликте. Построчное удаление raw не используется. После удаления partition полный перерасчёт диапазона невозможен, но уже опубликованная аналитика продолжает читаться.

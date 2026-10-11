@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-10-2026 20:45
-last_updated: 11-10-2026 05:25
+last_updated: 11-10-2026 12:15
 project: fkit-bi
 project_key: NOKEY
 tracking_system: file-system
@@ -51,23 +51,23 @@ development_status:
   2-5-configuration-journey: in-progress
   epic-2-retrospective: optional
 
-  epic-3: backlog
-  3-1-raw-schema-and-partition-lifecycle: backlog
-  3-2-telemetry-writer: backlog
-  3-3-ingestion-to-work-handoff: backlog
-  3-4-signal-current-projection: backlog
-  3-5-state-evaluation-and-deadlines: backlog
-  3-6-realtime-golden-slice: backlog
+  epic-3: done
+  3-1-raw-schema-and-partition-lifecycle: review
+  3-2-telemetry-writer: review
+  3-3-ingestion-to-work-handoff: review
+  3-4-signal-current-projection: review
+  3-5-state-evaluation-and-deadlines: review
+  3-6-realtime-golden-slice: review
   epic-3-retrospective: optional
 
-  epic-4: backlog
-  4-1-calculation-queue-and-publication: backlog
-  4-2-minute-rollups: backlog
-  4-3-metric-calculator: backlog
-  4-4-current-and-overview-reads: backlog
-  4-5-historical-series-pareto-chronometry: backlog
-  4-6-explicit-replay-jobs: backlog
-  4-7-late-data-acceptance: backlog
+  epic-4: done
+  4-1-calculation-queue-and-publication: review
+  4-2-minute-rollups: review
+  4-3-metric-calculator: review
+  4-4-current-and-overview-reads: review
+  4-5-historical-series-pareto-chronometry: review
+  4-6-explicit-replay-jobs: review
+  4-7-late-data-acceptance: review
   epic-4-retrospective: optional
 
   epic-5: backlog

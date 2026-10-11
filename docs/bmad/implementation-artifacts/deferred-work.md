@@ -16,3 +16,13 @@
 - source_spec: `fkit-bi-infra/docs/bmad/implementation-artifacts/spec-epic-2-equipment-configuration.md`
   summary: Web owner должен решить и реализовать редактирование/отключение существующих конфигурационных объектов в UX.
   evidence: Текущий интерфейс сценария настройки содержит создание объектов, но не редактирование и смену статусов, хотя Analytics API предоставляет соответствующие CRUD/status операции; ответственность за UI закреплена за Web-разработчиком.
+- source_spec: none
+  summary: Story 1.5 «Backup and restore operations» отложена до отдельного решения о сроках резервного копирования.
+  evidence: Пользователь попросил пока отложить резервное копирование и продолжить дальнейшие работы; ежедневные dumps, retention, age monitoring и restore drill не входят в текущую итерацию.
+# Epic 4 review follow-ups
+- source_spec: `fkit-bi-infra/docs/bmad/implementation-artifacts/spec-epic-4-historical-projections-and-query-api.md`
+  summary: Проверить fallback gaps для timeline, где присутствует только часть effective state intervals.
+  evidence: Текущий fallback подавляется при наличии любого effective interval; подтвердить влияние после появления Epic 5 manual overlays тестом смешанной timeline.
+- source_spec: `fkit-bi-infra/docs/bmad/implementation-artifacts/spec-epic-4-historical-projections-and-query-api.md`
+  summary: Объединить автоматические loss facts с ручными причинами/classifications в read-моделях.
+  evidence: Epic 4 rollups описывают вычисляемые факты, а ручные incident overlays реализуются в Epic 5; проверить Pareto и chronometry после добавления overlays.
