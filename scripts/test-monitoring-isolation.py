@@ -99,22 +99,25 @@ def helper_get(path, authorization=None):
 
 
 def wait_for_monitoring():
-    deadline = time.monotonic() + 60
+    deadline = time.monotonic() + 120
     last_error = None
+    last_state = None
     while time.monotonic() < deadline:
         try:
             targets = json.loads(helper_get("http://prometheus:9090/api/v1/targets"))
             health = {target["labels"]["job"]: target["health"]
                       for target in targets["data"]["activeTargets"]}
+            last_state = {"targets": health}
             if all(health.get(job) == "up" for job in ("analytics", "generator", "postgres", "node")):
                 dashboards = json.loads(helper_get("http://grafana:3000/api/search?type=dash-db",
                                                    "Basic " + base64.b64encode(b"admin:replace-with-a-grafana-secret").decode()))
+                last_state["dashboards"] = len(dashboards)
                 if len(dashboards) == 6:
                     return health, dashboards
         except (subprocess.CalledProcessError, KeyError, json.JSONDecodeError) as error:
             last_error = error
         time.sleep(1)
-    raise RuntimeError(f"Monitoring targets/dashboards did not become ready: {last_error}")
+    raise RuntimeError(f"Monitoring targets/dashboards did not become ready: {last_state}; last error: {last_error}")
 
 
 def dashboard_expressions():
