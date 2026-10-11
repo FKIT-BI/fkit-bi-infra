@@ -22,6 +22,13 @@ JWT_SECRET = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 BOOTSTRAP_PASSWORD = "Story14-Local-Test-Only-Password-42"
 
 
+def repository_path(name):
+    checkout = Path(ROOT) / ".ci" / name
+    if checkout.is_dir():
+        return checkout
+    return Path(ROOT).parent / name
+
+
 def run(command, *, cwd=ROOT, env=None, check=True, timeout=180):
     try:
         return subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True,
@@ -167,10 +174,10 @@ def main():
     built_images = []
     try:
         run(["docker", "build", "-t", ANALYTICS_IMAGE, "-f", "Dockerfile", "."],
-            cwd=os.path.join(ROOT, "..", "fkit-bi-analytics"), env=env, timeout=300)
+            cwd=repository_path("fkit-bi-analytics"), env=env, timeout=300)
         built_images.append(ANALYTICS_IMAGE)
         run(["docker", "build", "-t", GENERATOR_IMAGE, "-f", "Dockerfile", "."],
-            cwd=os.path.join(ROOT, "..", "fkit-bi-generator"), env=env, timeout=300)
+            cwd=repository_path("fkit-bi-generator"), env=env, timeout=300)
         built_images.append(GENERATOR_IMAGE)
 
         compose("up", "-d", "postgres", "analytics", "generator", "prometheus", "grafana",
