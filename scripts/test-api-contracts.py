@@ -9,11 +9,21 @@ from openapi_spec_validator import validate
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def repository_contract(repository, filename):
+    candidates = (
+        ROOT.parent / repository / "docs/contracts" / filename,
+        ROOT / ".ci" / repository / "docs/contracts" / filename,
+    )
+    return next((candidate for candidate in candidates if candidate.is_file()), candidates[0])
+
+
 CONTRACTS = (
     ROOT / "docs/contracts/auth-api.yaml",
-    ROOT / "../fkit-bi-analytics/docs/contracts/analytics-api-draft.yaml",
-    ROOT / "../fkit-bi-analytics/docs/contracts/draft-api.yaml",
-    ROOT / "../fkit-bi-generator/docs/contracts/generator-api-draft.yaml",
+    repository_contract("fkit-bi-analytics", "analytics-api-draft.yaml"),
+    repository_contract("fkit-bi-analytics", "draft-api.yaml"),
+    repository_contract("fkit-bi-generator", "generator-api-draft.yaml"),
 )
 EXPECTED_OPERATION_COUNTS = {
     "auth-api.yaml": 2,
@@ -69,7 +79,11 @@ def walk_refs(document, value, source):
 
 
 def lint(path):
-    source = path.relative_to(ROOT).as_posix()
+    source = (
+        path.relative_to(ROOT).as_posix()
+        if path.is_relative_to(ROOT)
+        else f"{path.parent.parent.name}/docs/contracts/{path.name}"
+    )
     document = yaml.load(path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)
     validate(document)
     if not isinstance(document, dict) or document.get("openapi") != "3.1.0":
@@ -119,7 +133,12 @@ def main():
             raise ValueError(f"missing OpenAPI contract: {contract}")
         count = lint(contract)
         total += count
-        print(f"OpenAPI OK: {contract.relative_to(ROOT)} ({count} operations)")
+        source = (
+            contract.relative_to(ROOT).as_posix()
+            if contract.is_relative_to(ROOT)
+            else f"{contract.parent.parent.name}/docs/contracts/{contract.name}"
+        )
+        print(f"OpenAPI OK: {source} ({count} operations)")
     print(f"OpenAPI structural lint passed: {len(CONTRACTS)} contracts, {total} operations")
 
 
