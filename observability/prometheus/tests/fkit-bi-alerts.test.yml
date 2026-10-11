@@ -153,10 +153,18 @@ tests:
   - interval: 1m
     input_series:
       - series: 'fkit_bi_partition_horizon_days'
-        values: '1 1'
+        values: '1 1 1 1 1 1 1'
     alert_rule_test:
-      - eval_time: 1m
+      - eval_time: 5m
         alertname: RawPartitionHorizonLow
         exp_alerts:
           - exp_labels: {severity: critical}
             exp_annotations: {summary: "Raw telemetry partition horizon is below two days"}
+  - interval: 1m
+    input_series:
+      - series: 'fkit_bi_partition_horizon_days'
+        values: '1 3 3 3 3 3 3'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: RawPartitionHorizonLow
+        exp_alerts: []

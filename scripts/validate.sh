@@ -6,6 +6,7 @@ for tls_mode in off self-signed public; do
   TLS_MODE="$tls_mode" docker compose --env-file .env.example config --quiet
 done
 python3 scripts/test-runtime-contracts.py
+python3 scripts/test-api-contracts.py
 python3 scripts/test-edge-http.py
 python3 certbot/test_renew.py
 python3 certbot/test_setup.py
@@ -23,7 +24,7 @@ docker compose --project-name "$certbot_contract_project" down --volumes --remov
 # Validate both the always-on HTTP config and the optional TLS listener with
 # disposable files. No Compose stack, DNS credentials, ACME request or deploy.
 docker run --rm \
-  --add-host analytics:127.0.0.1 --add-host generator:127.0.0.1 \
+  --add-host analytics:127.0.0.1 --add-host generator:127.0.0.1 --add-host web:127.0.0.1 \
   -v "$PWD/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro" \
   nginx:1.27-alpine nginx -t
 tls_validation_dir=$(mktemp -d "$PWD/.tls-validate.XXXXXX")
@@ -38,7 +39,7 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
   -addext 'subjectAltName=DNS:bi.kitexp.ru,DNS:*.bi.kitexp.ru' \
   >/dev/null 2>&1
 docker run --rm \
-  --add-host analytics:127.0.0.1 --add-host generator:127.0.0.1 \
+  --add-host analytics:127.0.0.1 --add-host generator:127.0.0.1 --add-host web:127.0.0.1 \
   -v "$PWD/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro" \
   -v "$tls_validation_dir/tls.conf:/etc/nginx/conf.d/tls.conf:ro" \
   -v "$tls_validation_dir:/etc/letsencrypt:ro" \

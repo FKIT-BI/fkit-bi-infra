@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-10-2026 20:45
-last_updated: 11-10-2026 13:03
+last_updated: 11-10-2026 15:05
 project: fkit-bi
 project_key: NOKEY
 tracking_system: file-system
@@ -77,17 +77,17 @@ development_status:
   5-4-incident-golden-tests: review
   epic-5-retrospective: optional
 
-  epic-6: backlog
-  6-1-scenario-api-and-storage: backlog
-  6-2-immutable-run-snapshot: backlog
-  6-3-realtime-execution: backlog
-  6-4-historical-and-scheduled-execution: backlog
-  6-5-generator-acceptance: backlog
+  epic-6: done
+  6-1-scenario-api-and-storage: done
+  6-2-immutable-run-snapshot: done
+  6-3-realtime-execution: done
+  6-4-historical-and-scheduled-execution: done
+  6-5-generator-acceptance: done
   epic-6-retrospective: optional
 
-  epic-7: backlog
-  7-1-contract-and-regression-ci: backlog
+  epic-7: in-progress
+  7-1-contract-and-regression-ci: in-progress
   7-2-performance-benchmark: backlog
-  7-3-failure-and-recovery-verification: backlog
+  7-3-failure-and-recovery-verification: in-progress
   7-4-demo-rehearsal: backlog
   epic-7-retrospective: optional

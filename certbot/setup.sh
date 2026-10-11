@@ -55,6 +55,7 @@ case "$mode" in
       echo 'Yandex service-account key file is missing.' >&2
       exit 1
     }
+    python3 /opt/fkit/certbot/yandex_dns.py validate
     if [ -d "$public_live_dir" ] && [ ! -s /etc/letsencrypt/renewal/bi.kitexp.ru.conf ]; then
       legacy_dir="/etc/letsencrypt/self-signed/legacy-bi.kitexp.ru-$(date +%s)"
       mkdir -p /etc/letsencrypt/self-signed

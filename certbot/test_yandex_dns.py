@@ -87,6 +87,12 @@ class YandexDnsHookTest(unittest.TestCase):
         self.assertEqual(1, len(records))
         self.assertIn("pageToken=next%20page", request.call_args_list[1].args[0])
 
+    @patch("yandex_dns.request", return_value={"recordSets": [], "nextPageToken": "same-token"})
+    def test_record_listing_rejects_repeated_page_token(self, request):
+        with self.assertRaisesRegex(RuntimeError, "repeated a record-set page token"):
+            yandex_dns.challenge_record_sets("token", "zone", "_acme-challenge.bi.kitexp.ru.")
+        self.assertEqual(2, request.call_count)
+
     @patch("yandex_dns.request", return_value={"iamToken": "issued-token"})
     def test_access_token_builds_ps256_jwt_for_iam_audience(self, request):
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -97,7 +103,11 @@ class YandexDnsHookTest(unittest.TestCase):
         ).decode()
         with tempfile.TemporaryDirectory() as temporary:
             key_file = Path(temporary) / "key.json"
-            key_file.write_text(json.dumps({"private_key": pem}))
+            key_file.write_text(json.dumps({
+                "id": "key-test",
+                "service_account_id": "service-account-test",
+                "private_key": pem,
+            }))
             with patch.dict(os.environ, {
                 "YANDEX_SERVICE_ACCOUNT_ID": "service-account-test",
                 "YANDEX_KEY_ID": "key-test",
@@ -111,6 +121,18 @@ class YandexDnsHookTest(unittest.TestCase):
         self.assertEqual({"alg": "PS256", "kid": "key-test", "typ": "JWT"}, decode(header_text))
         self.assertEqual(yandex_dns.IAM_API, decode(payload_text)["aud"])
         self.assertEqual("service-account-test", decode(payload_text)["iss"])
+
+    def test_service_account_key_validation_rejects_placeholder_json(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            key_file = Path(temporary) / "key.json"
+            key_file.write_text("{}")
+            with patch.dict(os.environ, {
+                "YANDEX_SERVICE_ACCOUNT_ID": "service-account-test",
+                "YANDEX_KEY_ID": "key-test",
+                "YANDEX_SERVICE_ACCOUNT_KEY_FILE": str(key_file),
+            }):
+                with self.assertRaisesRegex(RuntimeError, "key id does not match"):
+                    yandex_dns.service_account_private_key()
 
     @patch("yandex_dns.time.monotonic", side_effect=[0, 0, 0.1, 0.2])
     @patch("yandex_dns.time.sleep")

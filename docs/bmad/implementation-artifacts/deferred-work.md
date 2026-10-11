@@ -26,3 +26,9 @@
 - source_spec: `fkit-bi-infra/docs/bmad/implementation-artifacts/spec-epic-4-historical-projections-and-query-api.md`
   summary: Объединить автоматические loss facts с ручными причинами/classifications в read-моделях.
   evidence: Epic 4 rollups описывают вычисляемые факты, а ручные incident overlays реализуются в Epic 5; проверить Pareto и chronometry после добавления overlays.
+- source_spec: `fkit-bi-infra/docs/bmad/implementation-artifacts/spec-publish-dev-delivery.md`
+  summary: Определить безопасный runtime-smoke путь для fork-originated pull requests без доступа к секрету checkout приватных соседних репозиториев.
+  evidence: GitHub не передаёт repository secrets из fork PR, поэтому checkout Analytics/Generator завершается ошибкой; текущие внутренние push и PR используют доступный org secret.
+- source_spec: `fkit-bi-infra/docs/bmad/implementation-artifacts/spec-publish-dev-delivery.md`
+  summary: Подтвердить поведение Yandex DNS при operation timeout и исключить гонку завершения операции с Certbot cleanup.
+  evidence: Hook завершает polling через 60 секунд, но без подтверждённой гарантии отмены/завершения от Yandex API нельзя установить, может ли update завершиться позже и пересечься с cleanup; проверить на delayed-operation mock или в отдельной безопасной зоне.

@@ -86,6 +86,20 @@ context:
 
 ## Review Triage Log
 
+- `medium` / `defer` — Infra CI clones private backend repositories with `FKIT_BI_GITHUB_TOKEN`; fork-originated pull requests do not receive repository secrets and cannot run this smoke path. The internal develop workflow has the token, so this does not block the current delivery; revisit the credential-free/fork CI policy separately.
+- `false` — The public TLS setup intentionally fails closed when first issuance fails; moving an unmanaged lineage before issuance does not violate the recorded no-fallback policy, and the current IP-only deployment uses `TLS_MODE=off`.
+- `medium` / `patch` — `certbot/setup.sh` checks only that the Yandex key file is nonempty, so `{}` passes preflight and malformed credentials are discovered only later by the DNS hook. Validate key JSON and key identity before touching certificate lineages.
+- `low` (rejected) — Self-signed pair replacement uses two renames, but setup completes before proxy recreation and a later setup detects a mismatch and regenerates it; the remaining partial-write window requires an unusual filesystem failure and an atomic-directory swap would add complexity disproportionate to this path.
+- `maybe-false` / `defer` — The Yandex DNS operation poll times out at 60 seconds; whether a timed-out operation can still mutate the zone and race with cleanup needs confirmation against live operation semantics or a faithful delayed-operation test.
+- `low` (rejected) — Invalid `DNS_PROPAGATION_WAIT_SECONDS` values fail the hook visibly and fail closed; this is a malformed optional operator setting, not a silent or ordinary-use defect.
+- `medium` / `patch` — README says bootstrap credentials come from outside Git but gives no concrete safe injection example; add a private env-file workflow and avoid placing values in command history or committed files.
+- `medium` / `patch` — Deployment docs present the 2026-10-04 `:8080` endpoint as current despite the current 80/443 Compose mapping and later delivery failures; label the successful run as historical and record the current blocked verification state.
+- `medium` / `patch` — TLS docs lack recovery steps for failed initial issuance; add safe log inspection, configuration correction, and retry guidance without enabling a fallback certificate.
+- `low` / `patch` — A single transient low partition-horizon sample starts the critical alert immediately; add a short `for` duration and assert the sustained threshold in promtool tests. Missing series alone does not satisfy the `< 2` expression.
+- `medium` / `patch` — `challenge_record_sets` follows `nextPageToken` without remembering prior tokens, so a repeated nonempty token can loop indefinitely; add repeated-token detection. The review citation line was stale, but the outcome is reachable at the current pagination loop.
+- `medium` / `patch` — Web adds Vitest recovery tests but its CI verify command omits `npm test`; add that command to the normal CI path.
+- `medium` / `patch` — Local `scripts/validate.sh` and the infra delivery preflight run `nginx -t` without a `web` host alias although the config contains `proxy_pass http://web:80`; add a loopback alias and assert it in the delivery test.
+
 ## Design Notes
 
 Service-level healthcheck остаётся локальным после restart, поскольку именно он подтверждает новое приложение. Infra-level delivery дополняет его внешними public checks и не изменяет image references: тем самым сервисный и инфраструктурный контуры не конкурируют за одну ответственность.

@@ -26,7 +26,7 @@ helper; proxy пересоздаётся для применения Nginx. Ngin
 только этот proxy-образ. В завершение из runner проверяются
 `/`, `/api/analytics/actuator/health` и `/api/generator/actuator/health`.
 
-## Первичная готовность стенда
+## Историческое подтверждение первичной готовности стенда (2026-10-04)
 
 На 2026-10-04 Dev подтверждён снаружи: `/` и оба API health endpoint вернули
 HTTP 200; backend ответил `{"status":"UP"}`. Infra `f08d8eb8004538f70e7b4c04fbfb553a0d02a287`
@@ -42,8 +42,8 @@ HTTP 200; backend ответил `{"status":"UP"}`. Infra `f08d8eb8004538f70e7b4
 commit SHA и delivery только изменённого сервиса. Infra workflow доставляет
 Compose/nginx-конфигурацию по push в `develop`.
 
-Текущая проверенная точка Dev на 2026-10-04: `http://45.132.176.28:8080`.
-Это прежний временный endpoint; Story 1.4 публикует только порты 80/443 через
+Исторически проверенный endpoint Dev на 2026-10-04: `http://45.132.176.28:8080`.
+Это прежний временный endpoint; текущий Compose публикует только порты 80/443 через
 Nginx, IP остаётся доступен по HTTP на порту 80. Целевая схема сохраняет
 доступ и по публичному IP, и по `bi.kitexp.ru`: домен обслуживается через Nginx на 80/443 с автоматическим
 Certbot DNS-01 для `bi.kitexp.ru` и `*.bi.kitexp.ru`; IP остаётся доступен по HTTP
@@ -57,6 +57,19 @@ AAAA публиковать только при рабочем IPv6.
 Конфигурация сервера — `/opt/fkit-bi/.env`
 (режим 600, никогда не коммитится); PostgreSQL хранится в named volume
 `postgres-data`. Никогда не выполняйте `docker compose down -v`.
+
+### Текущее состояние (2026-10-11)
+
+Инфраструктурный CI run [38150249821](https://github.com/FKIT-BI/fkit-bi-infra/actions/runs/38150249821)
+успешно выполнил `verify`, но Dev delivery остановился на удалённом preflight:
+в приватном `/opt/fkit-bi/.env` остался placeholder `GRAFANA_ADMIN_PASSWORD`.
+Infra SHA не применён этим run. Внешняя диагностика по старому `:8080` показала
+HTTP 200 для `/`, 502 для Analytics health и timeout для Generator health; на
+порту 80 корректного HTTP-ответа не было. Поэтому стенд сейчас не считается
+готовым, даже если главная страница на прежнем порту отображается. Actions URL
+для healthcheck уже переключён на `http://45.132.176.28`, как соответствует
+публикации Nginx на порту 80. Повторить delivery после установки непустого
+Grafana-пароля в приватном `.env`; значения секретов не выводить в логи.
 
 Для первичного запуска, когда опубликованы все текущие образы, выполните на
 сервере из каталога deployment:
@@ -98,6 +111,15 @@ Grafana публикуется только на `127.0.0.1:${GRAFANA_PORT:-3000
 SSH tunnel. Prometheus и exporters доступны только внутри Compose network. Compose
 provisioning создаёт datasource, шесть dashboards и alert rules. Остановка
 Prometheus или Grafana не является readiness-зависимостью Analytics/Generator.
+
+Если публичный выпуск сертификата не удался, проверьте `docker compose ps` и
+последние строки `docker compose logs --tail=100 cert-setup proxy`; не печатайте
+`.env` или ключ service account. Исправьте DNS-записи, доступность Yandex DNS API
+или параметры key/zone, затем повторите `docker compose run --rm cert-setup`.
+Пересоздавайте proxy только после успешной подготовки сертификата:
+`docker compose up -d --no-deps --force-recreate proxy`. Пока DNS не восстановлен,
+оставляйте IP-only режим явно заданным как `TLS_MODE=off`; `TLS_MODE=public` не
+переключается автоматически на другой режим.
 
 При ошибке сохраните диагностические данные командой `docker compose ps` и
 `docker compose logs --tail=100 <service>`. Восстанавливайте только известную

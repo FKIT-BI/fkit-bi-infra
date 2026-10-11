@@ -67,5 +67,6 @@ groups:
         annotations: {summary: "Filesystem free space is below 10 percent"}
       - alert: RawPartitionHorizonLow
         expr: fkit_bi_partition_horizon_days < 2
+        for: 5m
         labels: {severity: critical}
         annotations: {summary: "Raw telemetry partition horizon is below two days"}
