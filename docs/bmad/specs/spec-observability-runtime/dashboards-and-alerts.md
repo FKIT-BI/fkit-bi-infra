@@ -13,6 +13,12 @@
 
 Dashboards operational, а не business-facing: они не заменяют frontend analytics и не требуют machine/signal labels.
 
+Некоторые provisioned панели зависят от метрик будущих stories (расчёты,
+recalculation и projection backlog). Пока соответствующая instrumentation не
+попала в сервисы, такие панели могут быть пустыми; это само по себе не означает
+неисправность Prometheus или Grafana. Сверяйте наличие метрик с
+`/actuator/prometheus` соответствующего сервиса.
+
 ## Alert rules MVP
 
 | Условие | Уровень | For |

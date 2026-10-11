@@ -37,6 +37,11 @@ Infra-доставка не обновляет образы приложений
 закреплённый образ Nginx `nginx:1.27-alpine`, если его ещё нет на сервере.
 Private `.env` и PostgreSQL volume сохраняются.
 
+Для приватных checkout Analytics и Generator в infra CI и сервисных delivery
+workflow нужен Actions secret `FKIT_BI_GITHUB_TOKEN` с правом чтения обоих
+репозиториев. Такой секрет недоступен workflow из fork PR; их проверки следует
+запускать после открытия PR из организации.
+
 ## Условие доставки на Dev
 
 В каждом из четырёх GitHub-репозиториев/настроек организации должна быть
@@ -54,14 +59,16 @@ FKIT_BI_DEV_DEPLOY_ENABLED=true
 При включённой доставке используются Actions variables `FKIT_BI_DEV_HOST`,
 `FKIT_BI_DEV_SSH_USER`, `FKIT_BI_DEV_SSH_PORT`, `FKIT_BI_DEV_DEPLOY_PATH`,
 `FKIT_BI_DEV_PUBLIC_URL` (для infra), `FKIT_BI_DEV_SSH_KNOWN_HOSTS`; secrets —
-`FKIT_BI_DEV_SSH_PRIVATE_KEY` и `FKIT_BI_GITHUB_TOKEN` (для сервисных workflow).
+`FKIT_BI_DEV_SSH_PRIVATE_KEY`, `FKIT_BI_GITHUB_TOKEN` (для infra и сервисных
+workflow) и `FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD` (infra bootstrap). Последний
+должен содержать 64 строчных hex-символа; его значение не выводится в логи.
 Добавляйте их в настройки Actions, не в репозиторий и не в `.env.example`.
 
 ## Проверка результата
 
 - В GitHub Actions откройте run соответствующего репозитория, убедитесь, что
   `verify` успешен и доставка не помечена как disabled.
-- Dev: <http://45.132.176.28:8080/>.
+- Dev: <http://45.132.176.28/> (Nginx на порту 80; backend-порты не открыты наружу).
 - Health analytics: `/api/analytics/actuator/health`.
 - Health generator: `/api/generator/actuator/health`.
 
@@ -70,3 +77,16 @@ FKIT_BI_DEV_DEPLOY_ENABLED=true
 summary доставки. На сервере для диагностики используйте `docker compose ps` и
 `docker compose logs --tail=100 <service>`. Не публикуйте содержимое `.env` и
 не удаляйте volume командой `docker compose down -v`.
+
+Grafana доступна через SSH-туннель, а не напрямую из Интернета:
+
+```bash
+ssh -L 3000:127.0.0.1:3000 -p "$FKIT_BI_DEV_SSH_PORT" \
+  "$FKIT_BI_DEV_SSH_USER@$FKIT_BI_DEV_HOST"
+```
+
+После подключения откройте <http://127.0.0.1:3000/>. Пароль bootstrap хранится
+в Actions secret `FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD`. Доставка синхронизирует
+его с Grafana только при первом bootstrap. Для последующей ротации задайте новый
+пароль через Grafana UI/CLI, затем синхронизируйте его в защищённом `.env` и
+Actions secret; не передавайте значение аргументом команды или в shell history.

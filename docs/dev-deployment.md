@@ -71,6 +71,12 @@ HTTP 200 для `/`, 502 для Analytics health и timeout для Generator hea
 публикации Nginx на порту 80. Повторить delivery после установки непустого
 Grafana-пароля в приватном `.env`; значения секретов не выводить в логи.
 
+Infra delivery получает `FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD` из Actions secret.
+Если в `.env` ещё стоит известный placeholder, доставка запишет значение в файл
+с режимом `0600`, сбросит пароль Grafana и удалит временную копию. Пароль не
+попадает в журналы. Последующая ротация выполняется отдельно и не сбрасывается
+каждой infra-доставкой.
+
 Для первичного запуска, когда опубликованы все текущие образы, выполните на
 сервере из каталога deployment:
 
@@ -105,8 +111,31 @@ datasource и шесть dashboards, затем по очереди остана
 и проверяет readiness, metrics endpoint и login API. Тестовые контейнеры и volumes
 удаляются после выполнения; production DNS и ACME не используются.
 
-Задайте в private `.env` непустой `GRAFANA_ADMIN_PASSWORD`, отличный от placeholder
-из `.env.example`; bootstrap и delivery отклоняют известные placeholder-значения.
+Ожидание DNS после создания TXT регулируется `DNS_PROPAGATION_WAIT_SECONDS`
+(по умолчанию 20 секунд). Если DNS-01 выдача не проходит, проверьте TXT-запись
+командой `dig TXT _acme-challenge.bi.kitexp.ru` и увеличьте ожидание в приватном
+`.env` до фактической задержки propagation зоны. После выпуска проверьте, что
+SAN сертификата содержит apex `bi.kitexp.ru` и wildcard `*.bi.kitexp.ru`:
+
+```bash
+echo | openssl s_client -connect bi.kitexp.ru:443 -servername bi.kitexp.ru 2>/dev/null \
+  | openssl x509 -noout -ext subjectAltName
+```
+
+Периодически проверяйте, что сертификат действителен ещё как минимум 14 дней:
+
+```bash
+docker compose exec -T proxy openssl x509 \
+  -in /etc/letsencrypt/live/bi.kitexp.ru/fullchain.pem \
+  -checkend 1209600 -noout
+```
+
+При ненулевом коде проверьте логи renewal helper и повторите renewal до истечения
+сертификата.
+
+Задайте `FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD` как GitHub Actions secret;
+bootstrap заменяет известный placeholder в private `.env` и проверяет значение
+до старта Compose.
 Grafana публикуется только на `127.0.0.1:${GRAFANA_PORT:-3000}`; подключайтесь через
 SSH tunnel. Prometheus и exporters доступны только внутри Compose network. Compose
 provisioning создаёт datasource, шесть dashboards и alert rules. Остановка

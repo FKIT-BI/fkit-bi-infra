@@ -86,7 +86,7 @@ context:
 
 ## Review Triage Log
 
-- `medium` / `defer` — Infra CI clones private backend repositories with `FKIT_BI_GITHUB_TOKEN`; fork-originated pull requests do not receive repository secrets and cannot run this smoke path. The internal develop workflow has the token, so this does not block the current delivery; revisit the credential-free/fork CI policy separately.
+- `medium` / `defer` — carried: Infra CI clones private backend repositories with `FKIT_BI_GITHUB_TOKEN`; fork-originated pull requests do not receive repository secrets and cannot run this smoke path. The internal develop workflow has the token, so this does not block the current delivery; revisit the credential-free/fork CI policy separately.
 - `false` — The public TLS setup intentionally fails closed when first issuance fails; moving an unmanaged lineage before issuance does not violate the recorded no-fallback policy, and the current IP-only deployment uses `TLS_MODE=off`.
 - `medium` / `patch` — `certbot/setup.sh` checks only that the Yandex key file is nonempty, so `{}` passes preflight and malformed credentials are discovered only later by the DNS hook. Validate key JSON and key identity before touching certificate lineages.
 - `low` (rejected) — Self-signed pair replacement uses two renames, but setup completes before proxy recreation and a later setup detects a mismatch and regenerates it; the remaining partial-write window requires an unusual filesystem failure and an atomic-directory swap would add complexity disproportionate to this path.
@@ -99,12 +99,25 @@ context:
 - `medium` / `patch` — `challenge_record_sets` follows `nextPageToken` without remembering prior tokens, so a repeated nonempty token can loop indefinitely; add repeated-token detection. The review citation line was stale, but the outcome is reachable at the current pagination loop.
 - `medium` / `patch` — Web adds Vitest recovery tests but its CI verify command omits `npm test`; add that command to the normal CI path.
 - `medium` / `patch` — Local `scripts/validate.sh` and the infra delivery preflight run `nginx -t` without a `web` host alias although the config contains `proxy_pass http://web:80`; add a loopback alias and assert it in the delivery test.
+- `medium` / `patch` — В `docs/ci-cd.md` не указано, что infra CI тоже клонирует приватные Analytics/Generator и нуждается в `FKIT_BI_GITHUB_TOKEN`; добавлена конфигурация секрета и ограничение для fork PR.
+- `medium` / `patch` — `docs/ci-cd.md` ссылался на прежний внешний `:8080`, хотя текущий Compose публикует Nginx на `80`; проверочная ссылка обновлена.
+- `low` / `patch` — Документация говорила о Grafana SSH tunnel без команды и URL; добавлены конкретная команда туннеля и локальный адрес.
+- `medium` / `patch` — Изменение `GF_SECURITY_ADMIN_PASSWORD` не сбрасывает пароль в уже созданной Grafana DB; документирована отдельная процедура ротации, а первый bootstrap выполняет явный reset.
+- `medium` / `patch` — Ошибки renewal только логировались без операторской проверки срока сертификата; добавлена проверка с 14-дневным порогом.
+- `medium` / `patch` — Фиксированное DNS propagation ожидание могло быть недостаточным для медленной зоны; документированы `DNS_PROPAGATION_WAIT_SECONDS` и проверка TXT.
+- `low` / `patch` — TLS readiness не включала явную проверку SAN apex/wildcard; добавлена openssl-команда проверки сертификата.
+- `medium` / `patch` — В calculation dashboard legend ссылался на отсутствующие labels `application/outcome` для запросов по `priority/status` и `job_type`; legends приведены к labels результата каждого запроса.
+- `medium` / `patch` — В recalculation dashboard legends запрашивали `application/outcome` при группировке по `job_type` или одному `outcome`; шаблоны приведены к выдаваемым labels.
+- `medium` / `patch` — Provisioned панели будущих метрик не отличали отсутствие instrumentation от runtime failure; спецификация dashboard теперь отмечает planned метрики и API для сверки.
+- `high` / `patch` — Dev preflight обнаружил placeholder `GRAFANA_ADMIN_PASSWORD` и блокировал infra delivery до применения новой конфигурации и proxy. Добавлены scoped GitHub Actions secret и безопасный initial bootstrap с повторяемым reset для уже созданной Grafana DB; значение секрета не хранится в репозитории и не выводится в логи.
 
 ## Design Notes
 
 Service-level healthcheck остаётся локальным после restart, поскольку именно он подтверждает новое приложение. Infra-level delivery дополняет его внешними public checks и не изменяет image references: тем самым сервисный и инфраструктурный контуры не конкурируют за одну ответственность.
 
 ## Verification
+
+**Текущая попытка исправления (2026-10-11):** причиной текущей остановки Dev delivery был placeholder Grafana admin password на хосте. Секрет Actions настроен; локальные delivery stubs, `bash -n` и `git diff --check` прошли. Полный `scripts/validate.sh` выполняется; исправление ещё не опубликовано и фактический повторный deploy ожидает его push. Исторические результаты ниже относятся к предыдущему состоянию стенда и не подтверждают текущую готовность.
 
 **Commands:**
 

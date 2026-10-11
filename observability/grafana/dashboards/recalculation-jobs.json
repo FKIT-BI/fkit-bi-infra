@@ -1,1 +1,194 @@
-{"annotations":{"list":[]},"editable":false,"panels":[{"datasource":{"type":"prometheus","uid":"prometheus"},"fieldConfig":{"defaults":{"unit":"ops"},"overrides":[]},"gridPos":{"h":8,"w":12,"x":0,"y":0},"id":1,"options":{"legend":{"displayMode":"list","placement":"bottom"}},"targets":[{"expr":"sum by (job_type,outcome) (rate(fkit_bi_calculation_jobs_total[5m]))","legendFormat":"{{application}} {{outcome}}","refId":"A"}],"title":"Calculation runs","type":"timeseries"},{"datasource":{"type":"prometheus","uid":"prometheus"},"fieldConfig":{"defaults":{"unit":"s"},"overrides":[]},"gridPos":{"h":8,"w":12,"x":12,"y":0},"id":2,"options":{"legend":{"displayMode":"list","placement":"bottom"}},"targets":[{"expr":"histogram_quantile(0.95, sum by (le,job_type) (rate(fkit_bi_calculation_duration_seconds_bucket[5m])))","legendFormat":"{{application}} {{outcome}}","refId":"A"}],"title":"Calculation duration p95","type":"timeseries"},{"datasource":{"type":"prometheus","uid":"prometheus"},"fieldConfig":{"defaults":{"unit":"short"},"overrides":[]},"gridPos":{"h":8,"w":12,"x":0,"y":8},"id":3,"options":{"legend":{"displayMode":"list","placement":"bottom"}},"targets":[{"expr":"sum by (job_type) (fkit_bi_calculation_active)","legendFormat":"{{application}} {{outcome}}","refId":"A"}],"title":"Active calculation work","type":"timeseries"},{"datasource":{"type":"prometheus","uid":"prometheus"},"fieldConfig":{"defaults":{"unit":"ops"},"overrides":[]},"gridPos":{"h":8,"w":12,"x":12,"y":8},"id":4,"options":{"legend":{"displayMode":"list","placement":"bottom"}},"targets":[{"expr":"sum by (job_type) (increase(fkit_bi_calculation_jobs_total{outcome=\"failed\"}[5m]))","legendFormat":"{{application}} {{outcome}}","refId":"A"}],"title":"Recent failed jobs","type":"timeseries"},{"datasource":{"type":"prometheus","uid":"prometheus"},"fieldConfig":{"defaults":{"unit":"ops"},"overrides":[]},"gridPos":{"h":8,"w":12,"x":0,"y":16},"id":5,"options":{"legend":{"displayMode":"list","placement":"bottom"}},"targets":[{"expr":"sum by (outcome) (rate(fkit_bi_calculation_jobs_total[30m]))","legendFormat":"{{application}} {{outcome}}","refId":"A"}],"title":"Job completion trend","type":"timeseries"}],"refresh":"30s","schemaVersion":41,"tags":["fkit-bi","jobs"],"templating":{"list":[]},"time":{"from":"now-6h","to":"now"},"title":"Recalculation & jobs","uid":"fkit-jobs","version":1}
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (job_type,outcome) (rate(fkit_bi_calculation_jobs_total[5m]))",
+          "legendFormat": "{{job_type}} / {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Calculation runs",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le,job_type) (rate(fkit_bi_calculation_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{job_type}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Calculation duration p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (job_type) (fkit_bi_calculation_active)",
+          "legendFormat": "{{job_type}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Active calculation work",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (job_type) (increase(fkit_bi_calculation_jobs_total{outcome=\"failed\"}[5m]))",
+          "legendFormat": "{{job_type}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Recent failed jobs",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (rate(fkit_bi_calculation_jobs_total[30m]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Job completion trend",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": [
+    "fkit-bi",
+    "jobs"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "title": "Recalculation & jobs",
+  "uid": "fkit-jobs",
+  "version": 1
+}

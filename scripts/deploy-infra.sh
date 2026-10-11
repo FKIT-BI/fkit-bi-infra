@@ -11,12 +11,17 @@ esac
 for setting in \
   FKIT_BI_DEV_HOST FKIT_BI_DEV_SSH_USER FKIT_BI_DEV_SSH_PORT \
   FKIT_BI_DEV_DEPLOY_PATH FKIT_BI_DEV_PUBLIC_URL \
-  FKIT_BI_DEV_SSH_KNOWN_HOSTS FKIT_BI_DEV_SSH_PRIVATE_KEY; do
+  FKIT_BI_DEV_SSH_KNOWN_HOSTS FKIT_BI_DEV_SSH_PRIVATE_KEY \
+  FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD; do
   if [[ -z "${!setting:-}" ]]; then
     echo "Required Dev setting is missing: $setting" >&2
     exit 2
   fi
 done
+if [[ ! "$FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD" =~ ^[0-9a-f]{64}$ ]]; then
+  echo 'Dev Grafana admin secret must be 64 lowercase hexadecimal characters.' >&2
+  exit 2
+fi
 
 case "$FKIT_BI_DEV_SSH_PORT" in
   *[!0-9]*|'') echo 'Dev SSH port must be numeric.' >&2; exit 2 ;;
@@ -39,9 +44,12 @@ docker run --rm \
 key="$(mktemp)"
 known_hosts="$(mktemp)"
 bundle="$(mktemp)"
-trap 'rm -f "$key" "$known_hosts" "$bundle"' EXIT
+grafana_password_file="$(mktemp)"
+trap 'rm -f "$key" "$known_hosts" "$bundle" "$grafana_password_file"' EXIT
 printf '%s\n' "$FKIT_BI_DEV_SSH_PRIVATE_KEY" > "$key"
 chmod 600 "$key"
+printf '%s\n' "$FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD" > "$grafana_password_file"
+chmod 600 "$grafana_password_file"
 printf '%s\n' "$FKIT_BI_DEV_SSH_KNOWN_HOSTS" > "$known_hosts"
 
 git -C "$root" show-ref --verify --quiet refs/remotes/origin/develop || {
@@ -59,27 +67,30 @@ ssh_opts=(
 remote="$FKIT_BI_DEV_SSH_USER@$FKIT_BI_DEV_HOST"
 bundle_name="fkit-bi-infra-${sha}-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}.bundle"
 remote_bundle="/tmp/$bundle_name"
+remote_password_file="/tmp/fkit-bi-grafana-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}.secret"
 scp_opts=(
-  -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=yes
+  -p -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=yes
   -o ConnectTimeout=15 -o ConnectionAttempts=1
   -o "UserKnownHostsFile=$known_hosts" -P "$FKIT_BI_DEV_SSH_PORT"
 )
 scp "${scp_opts[@]}" "$bundle" "$remote:$remote_bundle"
+scp "${scp_opts[@]}" "$grafana_password_file" "$remote:$remote_password_file"
 
 # The heredoc is literal: only positional arguments cross the trust boundary.
 # shellcheck disable=SC2029
 ssh "${ssh_opts[@]}" "$remote" \
-  "flock -w 300 /tmp/fkit-bi-deploy.lock bash -s -- '$sha' '$FKIT_BI_DEV_DEPLOY_PATH' '$remote_bundle'" <<'REMOTE'
+  "flock -w 300 /tmp/fkit-bi-deploy.lock bash -s -- '$sha' '$FKIT_BI_DEV_DEPLOY_PATH' '$remote_bundle' '$remote_password_file'" <<'REMOTE'
 set -euo pipefail
 sha="$1"
 path="$2"
 bundle="$3"
+password_file="$4"
 preflight_dir=''
 cleanup() {
   if [[ -n "$preflight_dir" ]]; then
     git -C "$path" worktree remove --force "$preflight_dir" >/dev/null 2>&1 || true
   fi
-  rm -f "$bundle"
+  rm -f "$bundle" "$password_file"
 }
 trap cleanup EXIT
 
@@ -88,18 +99,49 @@ if [[ ! -f .env ]]; then
   echo 'Dev deployment is missing its private .env file.' >&2
   exit 1
 fi
+if [[ ! -f "$password_file" ]]; then
+  echo 'Dev deployment is missing the temporary Grafana secret.' >&2
+  exit 1
+fi
+grafana_bootstrap_password="$(<"$password_file")"
+if [[ ! "$grafana_bootstrap_password" =~ ^[0-9a-f]{64}$ ]]; then
+  echo 'Temporary Grafana secret has an invalid format.' >&2
+  exit 1
+fi
 grafana_password="$(docker compose config --environment | sed -n 's/^GRAFANA_ADMIN_PASSWORD=//p' | tail -n 1)"
 if [[ "$grafana_password" == \"*\" && "$grafana_password" == *\" ]]; then
   grafana_password="${grafana_password:1:${#grafana_password}-2}"
 elif [[ "$grafana_password" == \'*\' && "$grafana_password" == *\' ]]; then
   grafana_password="${grafana_password:1:${#grafana_password}-2}"
 fi
+grafana_needs_reset=0
 case "$grafana_password" in
   ''|replace-with-secret|replace-with-a-grafana-secret)
-    echo 'Dev deployment requires a non-placeholder GRAFANA_ADMIN_PASSWORD in .env.' >&2
-    exit 1
+    env_tmp="$(mktemp .env.XXXXXX)"
+    found_password=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      if [[ "$line" == GRAFANA_ADMIN_PASSWORD=* ]]; then
+        printf 'GRAFANA_ADMIN_PASSWORD=%s\n' "$grafana_bootstrap_password" >> "$env_tmp"
+        found_password=1
+      else
+        printf '%s\n' "$line" >> "$env_tmp"
+      fi
+    done < .env
+    if [[ "$found_password" == 0 ]]; then
+      printf 'GRAFANA_ADMIN_PASSWORD=%s\n' "$grafana_bootstrap_password" >> "$env_tmp"
+    fi
+    chmod 600 "$env_tmp"
+    mv -f "$env_tmp" .env
+    grafana_needs_reset=1
     ;;
 esac
+if [[ -f .fkit-bi-grafana-bootstrap-pending ]]; then
+  grafana_needs_reset=1
+fi
+if [[ "$grafana_needs_reset" == 1 ]]; then
+  : > .fkit-bi-grafana-bootstrap-pending
+  chmod 600 .fkit-bi-grafana-bootstrap-pending
+fi
 env_checksum_before="$(sha256sum .env)"
 
 # The runner transfers a verified Git bundle so the Dev host needs no GitHub
@@ -141,6 +183,22 @@ fi
 docker compose up -d --no-build --pull never --no-deps --force-recreate proxy
 docker compose pull prometheus grafana postgres-exporter node-exporter
 docker compose up -d --no-build --pull never prometheus grafana postgres-exporter node-exporter
+if [[ "$grafana_needs_reset" == 1 ]]; then
+  reset_ok=0
+  for attempt in $(seq 1 12); do
+    if docker compose exec -T grafana grafana cli admin reset-admin-password \
+      "$grafana_bootstrap_password" >/dev/null 2>&1; then
+      reset_ok=1
+      break
+    fi
+    sleep 5
+  done
+  if [[ "$reset_ok" != 1 ]]; then
+    echo 'Grafana admin password reset failed; bootstrap will retry on the next delivery.' >&2
+    exit 1
+  fi
+  rm -f .fkit-bi-grafana-bootstrap-pending
+fi
 docker compose up -d --no-build --pull never --no-deps cert-renew
 printf '%s\n' "$sha" > .fkit-bi-infra-sha
 docker compose ps

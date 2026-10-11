@@ -46,6 +46,7 @@ jobs:
       FKIT_BI_DEV_PUBLIC_URL: ${{ vars.FKIT_BI_DEV_PUBLIC_URL }}
       FKIT_BI_DEV_SSH_KNOWN_HOSTS: ${{ vars.FKIT_BI_DEV_SSH_KNOWN_HOSTS }}
       FKIT_BI_DEV_SSH_PRIVATE_KEY: ${{ secrets.FKIT_BI_DEV_SSH_PRIVATE_KEY }}
+      FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD: ${{ secrets.FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
         with:

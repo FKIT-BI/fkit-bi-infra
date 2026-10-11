@@ -46,6 +46,7 @@ expect_failure 'Dev deploy path must be an absolute safe path.' env \
   FKIT_BI_DEV_PUBLIC_URL=http://dev.example.test \
   FKIT_BI_DEV_SSH_KNOWN_HOSTS='dev.example.test ssh-ed25519 AAAA' \
   FKIT_BI_DEV_SSH_PRIVATE_KEY='test private key' \
+  FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
   ./scripts/deploy-infra.sh f5f0e7b6519a01233ab503f88e078cd7e239bc00
 
 # Внешний контракт healthcheck включает public URL и оба API.
@@ -142,8 +143,7 @@ server_dir="$temporary_dir/server"
 mkdir -p "$server_dir"
 printf '%s\n' \
   'PRIVATE_VALUE=unchanged' \
-  'GRAFANA_ADMIN_PASSWORD=story-1-4-test-secret' > "$server_dir/.env"
-env_before="$(sha256sum "$server_dir/.env")"
+  'GRAFANA_ADMIN_PASSWORD=replace-with-a-grafana-secret' > "$server_dir/.env"
 delivery_log="$temporary_dir/delivery.log"
 
 cat > "$temporary_dir/bin/docker" <<'EOF'
@@ -151,6 +151,11 @@ cat > "$temporary_dir/bin/docker" <<'EOF'
 set -euo pipefail
 if [[ "$*" == 'compose config --environment' ]]; then
   grep -E '^GRAFANA_ADMIN_PASSWORD=' .env || true
+  exit 0
+fi
+if [[ "$*" == *'grafana cli admin reset-admin-password '* ]]; then
+  printf 'docker compose exec -T grafana grafana cli admin reset-admin-password [REDACTED]\n' \
+    >> "$FKIT_BI_TEST_DELIVERY_LOG"
   exit 0
 fi
 printf 'docker %s\n' "$*" >> "$FKIT_BI_TEST_DELIVERY_LOG"
@@ -193,9 +198,12 @@ env \
   FKIT_BI_DEV_PUBLIC_URL=http://dev.example.test \
   FKIT_BI_DEV_SSH_KNOWN_HOSTS='dev.example.test ssh-ed25519 AAAA' \
   FKIT_BI_DEV_SSH_PRIVATE_KEY='test private key' \
+  FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
   ./scripts/deploy-infra.sh "$test_sha" >/dev/null
 
-[[ "$(sha256sum "$server_dir/.env")" == "$env_before" ]]
+[[ "$(grep -F 'PRIVATE_VALUE=unchanged' "$server_dir/.env")" == 'PRIVATE_VALUE=unchanged' ]]
+grep -Fx 'GRAFANA_ADMIN_PASSWORD=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$server_dir/.env" >/dev/null
+[[ ! -e "$server_dir/.fkit-bi-grafana-bootstrap-pending" ]]
 [[ "$(git -C "$server_dir" rev-parse HEAD)" == "$test_sha" ]]
 grep -Fx "$test_sha" "$server_dir/.fkit-bi-infra-sha" >/dev/null
 grep -F 'docker run --rm' "$delivery_log" >/dev/null
@@ -205,6 +213,11 @@ grep -F 'docker compose pull proxy' "$delivery_log" >/dev/null
 grep -F 'docker compose up -d --no-build --pull never --no-recreate web' "$delivery_log" >/dev/null
 grep -F 'docker compose build cert-setup' "$delivery_log" >/dev/null
 grep -F 'docker compose run --rm cert-setup' "$delivery_log" >/dev/null
+grep -F 'docker compose exec -T grafana grafana cli admin reset-admin-password' "$delivery_log" >/dev/null
+if grep -F 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$delivery_log" >/dev/null; then
+  echo 'Grafana admin password leaked into the delivery log.' >&2
+  exit 1
+fi
 grep -F 'docker compose up -d --no-build --pull never --no-deps --force-recreate proxy' "$delivery_log" >/dev/null
 grep -F 'docker compose pull prometheus grafana postgres-exporter node-exporter' "$delivery_log" >/dev/null
 grep -F 'docker compose up -d --no-build --pull never prometheus grafana postgres-exporter node-exporter' "$delivery_log" >/dev/null
