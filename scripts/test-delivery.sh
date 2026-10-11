@@ -159,6 +159,10 @@ if [[ "$*" == *'grafana cli admin reset-admin-password '* ]]; then
   exit 0
 fi
 printf 'docker %s\n' "$*" >> "$FKIT_BI_TEST_DELIVERY_LOG"
+if [[ "$*" == 'compose run --rm -T cert-setup' ]]; then
+  # A Compose one-off shares stdin with the remote script unless explicitly detached.
+  cat >/dev/null
+fi
 if [[ "${1:-}" == image && "${2:-}" == inspect ]]; then
   exit 1
 fi
@@ -212,7 +216,7 @@ grep -F 'nginx:1.27-alpine nginx -t' "$delivery_log" >/dev/null
 grep -F 'docker compose pull proxy' "$delivery_log" >/dev/null
 grep -F 'docker compose up -d --no-build --pull never --no-recreate web' "$delivery_log" >/dev/null
 grep -F 'docker compose build cert-setup' "$delivery_log" >/dev/null
-grep -F 'docker compose run --rm cert-setup' "$delivery_log" >/dev/null
+grep -F 'docker compose run --rm -T cert-setup' "$delivery_log" >/dev/null
 grep -F 'docker compose exec -T grafana grafana cli admin reset-admin-password' "$delivery_log" >/dev/null
 if grep -F 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$delivery_log" >/dev/null; then
   echo 'Grafana admin password leaked into the delivery log.' >&2

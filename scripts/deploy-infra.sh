@@ -174,7 +174,7 @@ docker compose config --quiet
 # Keep application image references unchanged. Build the pinned Certbot helper,
 # then reconcile infrastructure and monitoring services; never recreate web.
 docker compose build cert-setup
-docker compose run --rm cert-setup
+docker compose run --rm -T cert-setup </dev/null
 docker compose up -d --no-build --pull never postgres analytics generator
 docker compose up -d --no-build --pull never --no-recreate web
 if ! docker image inspect nginx:1.27-alpine >/dev/null 2>&1; then
