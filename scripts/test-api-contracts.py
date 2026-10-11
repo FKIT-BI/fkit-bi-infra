@@ -82,7 +82,7 @@ def lint(path):
     source = (
         path.relative_to(ROOT).as_posix()
         if path.is_relative_to(ROOT)
-        else f"{path.parent.parent.name}/docs/contracts/{path.name}"
+        else f"{path.parents[2].name}/docs/contracts/{path.name}"
     )
     document = yaml.load(path.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)
     validate(document)
@@ -136,7 +136,7 @@ def main():
         source = (
             contract.relative_to(ROOT).as_posix()
             if contract.is_relative_to(ROOT)
-            else f"{contract.parent.parent.name}/docs/contracts/{contract.name}"
+            else f"{contract.parents[2].name}/docs/contracts/{contract.name}"
         )
         print(f"OpenAPI OK: {source} ({count} operations)")
     print(f"OpenAPI structural lint passed: {len(CONTRACTS)} contracts, {total} operations")
