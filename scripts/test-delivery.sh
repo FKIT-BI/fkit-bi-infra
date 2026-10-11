@@ -219,7 +219,8 @@ if [[ "$*" == 'compose exec -T proxy wget -qO- --header=Host: bi.kitexp.ru http:
   exit 0
 fi
 if [[ "$*" == 'compose up -d --no-build --pull never --no-deps --force-recreate proxy' ]]; then
-  printf 'proxy TLS_MODE=%s\n' "${TLS_MODE:-unset}" >> "$FKIT_BI_TEST_DELIVERY_LOG"
+  proxy_tls_mode="${TLS_MODE:-$(sed -n 's/^TLS_MODE=//p' .env | tail -n 1)}"
+  printf 'proxy TLS_MODE=%s\n' "${proxy_tls_mode:-unset}" >> "$FKIT_BI_TEST_DELIVERY_LOG"
 fi
 if [[ "$*" == *'--entrypoint /bin/sh cert-setup -c test -s /etc/letsencrypt/live/'* ]]; then
   [[ "${FKIT_BI_TEST_CERT_PRESENT:-0}" == 1 ]]
