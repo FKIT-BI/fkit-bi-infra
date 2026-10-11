@@ -13,7 +13,12 @@ cat > "$temporary_dir/bin/ssh" <<'EOF'
 echo 'ssh must not be called during preflight failure' >&2
 exit 99
 EOF
-chmod +x "$temporary_dir/bin/ssh"
+cat > "$temporary_dir/bin/scp" <<'EOF'
+#!/usr/bin/env bash
+echo 'scp reached after non-public preflight' >&2
+exit 99
+EOF
+chmod +x "$temporary_dir/bin/ssh" "$temporary_dir/bin/scp"
 
 expect_failure() {
   local expected="$1"
@@ -43,7 +48,24 @@ expect_failure 'Dev deploy path must be an absolute safe path.' env \
   FKIT_BI_DEV_SSH_USER=deployer \
   FKIT_BI_DEV_SSH_PORT=22 \
   "FKIT_BI_DEV_DEPLOY_PATH=/opt/fkit-bi' injected" \
+  FKIT_BI_DEV_PUBLIC_URL=https://bi.kitexp.ru \
+  FKIT_BI_DEV_TLS_MODE=public \
+  FKIT_BI_DEV_CERTBOT_CHALLENGE=http-01 \
+  FKIT_BI_DEV_CERTBOT_EMAIL=operator@example.test \
+  FKIT_BI_DEV_SSH_KNOWN_HOSTS='dev.example.test ssh-ed25519 AAAA' \
+  FKIT_BI_DEV_SSH_PRIVATE_KEY='test private key' \
+  FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+  ./scripts/deploy-infra.sh f5f0e7b6519a01233ab503f88e078cd7e239bc00
+
+# Non-public delivery does not require Certbot-specific settings.
+expect_failure 'scp reached after non-public preflight' env \
+  PATH="$temporary_dir/bin:$PATH" \
+  FKIT_BI_DEV_HOST=dev.example.test \
+  FKIT_BI_DEV_SSH_USER=deployer \
+  FKIT_BI_DEV_SSH_PORT=22 \
+  FKIT_BI_DEV_DEPLOY_PATH=/opt/fkit-bi \
   FKIT_BI_DEV_PUBLIC_URL=http://dev.example.test \
+  FKIT_BI_DEV_TLS_MODE=off \
   FKIT_BI_DEV_SSH_KNOWN_HOSTS='dev.example.test ssh-ed25519 AAAA' \
   FKIT_BI_DEV_SSH_PRIVATE_KEY='test private key' \
   FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
@@ -53,7 +75,16 @@ expect_failure 'Dev deploy path must be an absolute safe path.' env \
 health_log="$temporary_dir/health.log"
 cat > "$temporary_dir/bin/curl" <<'EOF'
 #!/usr/bin/env bash
+set -euo pipefail
+output=''
+for ((index = 1; index <= $#; index++)); do
+  if [[ "${!index}" == --output ]]; then
+    output_index=$((index + 1))
+    output="${!output_index}"
+  fi
+done
 printf '%s\n' "${!#}" >> "$FKIT_BI_TEST_HEALTH_LOG"
+[[ -z "$output" ]] || printf '{"status":"UP"}\n' > "$output"
 EOF
 chmod +x "$temporary_dir/bin/curl"
 FKIT_BI_TEST_HEALTH_LOG="$health_log" PATH="$temporary_dir/bin:$PATH" \
@@ -61,6 +92,19 @@ FKIT_BI_TEST_HEALTH_LOG="$health_log" PATH="$temporary_dir/bin:$PATH" \
 grep -Fx 'http://dev.example.test/' "$health_log" >/dev/null
 grep -Fx 'http://dev.example.test/api/analytics/actuator/health' "$health_log" >/dev/null
 grep -Fx 'http://dev.example.test/api/generator/actuator/health' "$health_log" >/dev/null
+: > "$health_log"
+FKIT_BI_TEST_HEALTH_LOG="$health_log" PATH="$temporary_dir/bin:$PATH" \
+  ./scripts/healthcheck.sh https://bi.kitexp.ru \
+    https://api.bi.kitexp.ru/actuator/health \
+    https://generator.bi.kitexp.ru/actuator/health
+grep -Fx 'https://bi.kitexp.ru/' "$health_log" >/dev/null
+grep -Fx 'https://bi.kitexp.ru/api/analytics/actuator/health' "$health_log" >/dev/null
+grep -Fx 'https://bi.kitexp.ru/api/generator/actuator/health' "$health_log" >/dev/null
+grep -Fx 'https://api.bi.kitexp.ru/actuator/health' "$health_log" >/dev/null
+grep -Fx 'https://generator.bi.kitexp.ru/actuator/health' "$health_log" >/dev/null
+expect_failure 'usage: healthcheck.sh' env \
+  FKIT_BI_TEST_HEALTH_LOG="$health_log" PATH="$temporary_dir/bin:$PATH" \
+  ./scripts/healthcheck.sh https://bi.kitexp.ru https://api.bi.kitexp.ru/actuator/health
 
 # Service delivery chooses the health endpoint for the selected runtime.
 cat > "$temporary_dir/bin/flock" <<'EOF'
@@ -134,6 +178,9 @@ expect_failure 'Unsupported service.' env \
 grep -F "if: github.event_name == 'push' && github.ref == 'refs/heads/develop'" \
   .github/workflows/ci.yml >/dev/null
 grep -F "Dev infra delivery is disabled" .github/workflows/ci.yml >/dev/null
+grep -F 'FKIT_BI_DEV_TLS_MODE:' .github/workflows/ci.yml >/dev/null
+grep -F 'FKIT_BI_DEV_CERTBOT_CHALLENGE:' .github/workflows/ci.yml >/dev/null
+grep -F 'FKIT_BI_DEV_CERTBOT_EMAIL:' .github/workflows/ci.yml >/dev/null
 
 # A successful delivery is executed entirely through stubs.  This exercises
 # the remote heredoc and proves its exact-SHA, private-.env and no-pull/web
@@ -143,6 +190,10 @@ server_dir="$temporary_dir/server"
 mkdir -p "$server_dir"
 printf '%s\n' \
   'PRIVATE_VALUE=unchanged' \
+  'ANALYTICS_IMAGE=analytics-kept' \
+  'GENERATOR_IMAGE=generator-kept' \
+  'WEB_IMAGE=web-kept' \
+  'GIT_SHA=application-sha-kept' \
   'GRAFANA_ADMIN_PASSWORD=replace-with-a-grafana-secret' > "$server_dir/.env"
 delivery_log="$temporary_dir/delivery.log"
 
@@ -161,9 +212,26 @@ if [[ "$*" == *'grafana cli admin reset-admin-password '* ]]; then
   exit 0
 fi
 printf 'docker %s\n' "$*" >> "$FKIT_BI_TEST_DELIVERY_LOG"
+if [[ "$*" == 'compose exec -T proxy wget -qO- --header=Host: bi.kitexp.ru http://127.0.0.1/.well-known/acme-challenge/fkit-bi-listener-probe' ]]; then
+  if [[ "${FKIT_BI_TEST_ACME_LISTENER_PRESENT:-0}" == 1 ]]; then
+    printf 'challenge-ready'
+  fi
+  exit 0
+fi
+if [[ "$*" == 'compose up -d --no-build --pull never --no-deps --force-recreate proxy' ]]; then
+  printf 'proxy TLS_MODE=%s\n' "${TLS_MODE:-unset}" >> "$FKIT_BI_TEST_DELIVERY_LOG"
+fi
+if [[ "$*" == *'--entrypoint /bin/sh cert-setup -c test -s /etc/letsencrypt/live/'* ]]; then
+  [[ "${FKIT_BI_TEST_CERT_PRESENT:-0}" == 1 ]]
+  exit
+fi
 if [[ "$*" == 'compose run --rm -T cert-setup' ]]; then
   # A Compose one-off shares stdin with the remote script unless explicitly detached.
   cat >/dev/null
+  if [[ "${FKIT_BI_TEST_CERT_SETUP_MODE:-success}" == failure ]]; then
+    echo 'simulated Certbot failure' >&2
+    exit 41
+  fi
 fi
 if [[ "${1:-}" == image && "${2:-}" == inspect ]]; then
   exit 1
@@ -188,7 +256,15 @@ bash -c "$remote_command"
 EOF
 cat > "$temporary_dir/bin/curl" <<'EOF'
 #!/usr/bin/env bash
-exit 0
+set -euo pipefail
+output=''
+for ((index = 1; index <= $#; index++)); do
+  if [[ "${!index}" == --output ]]; then
+    output_index=$((index + 1))
+    output="${!output_index}"
+  fi
+done
+[[ -z "$output" ]] || printf '{"status":"UP"}\n' > "$output"
 EOF
 chmod +x "$temporary_dir/bin/scp" "$temporary_dir/bin/docker" \
   "$temporary_dir/bin/ssh" "$temporary_dir/bin/curl"
@@ -201,14 +277,24 @@ env \
   FKIT_BI_DEV_SSH_USER=deployer \
   FKIT_BI_DEV_SSH_PORT=22 \
   FKIT_BI_DEV_DEPLOY_PATH="$server_dir" \
-  FKIT_BI_DEV_PUBLIC_URL=http://dev.example.test \
+  FKIT_BI_DEV_PUBLIC_URL=https://bi.kitexp.ru \
+  FKIT_BI_DEV_TLS_MODE=public \
+  FKIT_BI_DEV_CERTBOT_CHALLENGE=http-01 \
+  FKIT_BI_DEV_CERTBOT_EMAIL=operator@example.test \
   FKIT_BI_DEV_SSH_KNOWN_HOSTS='dev.example.test ssh-ed25519 AAAA' \
   FKIT_BI_DEV_SSH_PRIVATE_KEY='test private key' \
   FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
   ./scripts/deploy-infra.sh "$test_sha" >/dev/null
 
 [[ "$(grep -F 'PRIVATE_VALUE=unchanged' "$server_dir/.env")" == 'PRIVATE_VALUE=unchanged' ]]
+grep -Fx 'ANALYTICS_IMAGE=analytics-kept' "$server_dir/.env" >/dev/null
+grep -Fx 'GENERATOR_IMAGE=generator-kept' "$server_dir/.env" >/dev/null
+grep -Fx 'WEB_IMAGE=web-kept' "$server_dir/.env" >/dev/null
+grep -Fx 'GIT_SHA=application-sha-kept' "$server_dir/.env" >/dev/null
 grep -Fx 'GRAFANA_ADMIN_PASSWORD=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$server_dir/.env" >/dev/null
+grep -Fx 'TLS_MODE=public' "$server_dir/.env" >/dev/null
+grep -Fx 'CERTBOT_CHALLENGE=http-01' "$server_dir/.env" >/dev/null
+grep -Fx 'CERTBOT_EMAIL=operator@example.test' "$server_dir/.env" >/dev/null
 [[ ! -e "$server_dir/.fkit-bi-grafana-bootstrap-pending" ]]
 [[ "$(git -C "$server_dir" rev-parse HEAD)" == "$test_sha" ]]
 grep -Fx "$test_sha" "$server_dir/.fkit-bi-infra-sha" >/dev/null
@@ -218,6 +304,7 @@ grep -F 'nginx:1.27-alpine nginx -t' "$delivery_log" >/dev/null
 grep -F 'docker compose pull proxy' "$delivery_log" >/dev/null
 grep -F 'docker compose up -d --no-build --pull never --no-recreate web' "$delivery_log" >/dev/null
 grep -F 'docker compose build cert-setup' "$delivery_log" >/dev/null
+[[ "$(grep -Fc 'docker compose run --rm -T --no-deps --entrypoint /bin/sh cert-setup' "$delivery_log")" == 2 ]]
 grep -F 'docker compose run --rm -T cert-setup' "$delivery_log" >/dev/null
 grep -F 'docker compose exec -T grafana grafana cli admin reset-admin-password' "$delivery_log" >/dev/null
 if grep -F 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$delivery_log" >/dev/null; then
@@ -225,6 +312,9 @@ if grep -F 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$
   exit 1
 fi
 grep -F 'docker compose up -d --no-build --pull never --no-deps --force-recreate proxy' "$delivery_log" >/dev/null
+[[ "$(grep -Fc 'docker compose up -d --no-build --pull never --no-deps --force-recreate proxy' "$delivery_log")" == 2 ]]
+grep -Fx 'proxy TLS_MODE=off' "$delivery_log" >/dev/null
+grep -Fx 'proxy TLS_MODE=public' "$delivery_log" >/dev/null
 grep -F 'docker compose pull prometheus grafana postgres-exporter node-exporter' "$delivery_log" >/dev/null
 grep -F 'docker compose up -d --no-build --pull never prometheus grafana postgres-exporter node-exporter' "$delivery_log" >/dev/null
 grep -F 'docker compose up -d --no-build --pull never --no-deps cert-renew' "$delivery_log" >/dev/null
@@ -232,6 +322,40 @@ if grep -E 'docker compose pull (postgres|analytics|generator|web)( |$)' "$deliv
   echo 'Infra delivery must not pull database or service images.' >&2
   exit 1
 fi
+
+# Failed first issuance leaves the HTTP-only proxy in place and never records
+# the revision as successfully delivered.
+failed_server_dir="$temporary_dir/server-certbot-failure"
+failed_delivery_log="$temporary_dir/delivery-certbot-failure.log"
+mkdir -p "$failed_server_dir"
+printf '%s\n' \
+  'PRIVATE_VALUE=unchanged' \
+  'ANALYTICS_IMAGE=analytics-kept' \
+  'GENERATOR_IMAGE=generator-kept' \
+  'WEB_IMAGE=web-kept' \
+  'GIT_SHA=application-sha-kept' \
+  'GRAFANA_ADMIN_PASSWORD=already-configured' > "$failed_server_dir/.env"
+expect_failure 'simulated Certbot failure' env \
+  PATH="$temporary_dir/bin:$PATH" \
+  FKIT_BI_TEST_DELIVERY_LOG="$failed_delivery_log" \
+  FKIT_BI_TEST_CERT_SETUP_MODE=failure \
+  FKIT_BI_DEV_HOST=dev.example.test \
+  FKIT_BI_DEV_SSH_USER=deployer \
+  FKIT_BI_DEV_SSH_PORT=22 \
+  FKIT_BI_DEV_DEPLOY_PATH="$failed_server_dir" \
+  FKIT_BI_DEV_PUBLIC_URL=https://bi.kitexp.ru \
+  FKIT_BI_DEV_TLS_MODE=public \
+  FKIT_BI_DEV_CERTBOT_CHALLENGE=http-01 \
+  FKIT_BI_DEV_CERTBOT_EMAIL=operator@example.test \
+  FKIT_BI_DEV_SSH_KNOWN_HOSTS='dev.example.test ssh-ed25519 AAAA' \
+  FKIT_BI_DEV_SSH_PRIVATE_KEY='test private key' \
+  FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+  ./scripts/deploy-infra.sh "$test_sha"
+grep -F 'docker compose up -d --no-build --pull never --no-deps --force-recreate proxy' \
+  "$failed_delivery_log" >/dev/null
+[[ ! -e "$failed_server_dir/.fkit-bi-infra-sha" ]]
+grep -Fx 'PRIVATE_VALUE=unchanged' "$failed_server_dir/.env" >/dev/null
+grep -Fx 'GIT_SHA=application-sha-kept' "$failed_server_dir/.env" >/dev/null
 
 # bootstrap-dev starts the complete default Compose stack.
 grep -A 12 '^  generator:' compose.yaml | grep -F '      analytics: {condition: service_healthy}' >/dev/null
@@ -251,12 +375,35 @@ health_count="$temporary_dir/health-count"
 sleep_count="$temporary_dir/sleep-count"
 cat > "$temporary_dir/bin/curl" <<'EOF'
 #!/usr/bin/env bash
+set -euo pipefail
 count=0
 [[ -f "$FKIT_BI_TEST_HEALTH_COUNT" ]] && count="$(<"$FKIT_BI_TEST_HEALTH_COUNT")"
 count=$((count + 1))
 printf '%s\n' "$count" > "$FKIT_BI_TEST_HEALTH_COUNT"
 [[ "${FKIT_BI_TEST_HEALTH_MODE:-}" == fail ]] && exit 1
-(( count > 2 ))
+if [[ "${FKIT_BI_TEST_HEALTH_MODE:-}" == down ]]; then
+  output=''
+  for ((index = 1; index <= $#; index++)); do
+    if [[ "${!index}" == --output ]]; then
+      output_index=$((index + 1))
+      output="${!output_index}"
+    fi
+  done
+  [[ -z "$output" ]] || printf '{"status":"DOWN"}\n' > "$output"
+  exit 0
+fi
+if (( count > 2 )); then
+  output=''
+  for ((index = 1; index <= $#; index++)); do
+    if [[ "${!index}" == --output ]]; then
+      output_index=$((index + 1))
+      output="${!output_index}"
+    fi
+  done
+  [[ -z "$output" ]] || printf '{"status":"UP"}\n' > "$output"
+  exit 0
+fi
+exit 1
 EOF
 cat > "$temporary_dir/bin/sleep" <<'EOF'
 #!/usr/bin/env bash
@@ -278,4 +425,14 @@ expect_failure 'Healthcheck failed: http://dev.example.test/' env \
   FKIT_BI_TEST_SLEEP_COUNT="$sleep_count" \
   PATH="$temporary_dir/bin:$PATH" ./scripts/healthcheck.sh http://dev.example.test
 [[ "$(<"$health_count")" == 24 ]]
+[[ "$(<"$sleep_count")" == 23 ]]
+
+: > "$health_count"
+: > "$sleep_count"
+expect_failure 'Healthcheck failed: http://dev.example.test/api/analytics/actuator/health' env \
+  FKIT_BI_TEST_HEALTH_MODE=down \
+  FKIT_BI_TEST_HEALTH_COUNT="$health_count" \
+  FKIT_BI_TEST_SLEEP_COUNT="$sleep_count" \
+  PATH="$temporary_dir/bin:$PATH" ./scripts/healthcheck.sh http://dev.example.test
+[[ "$(<"$health_count")" == 25 ]]
 [[ "$(<"$sleep_count")" == 23 ]]

@@ -8,11 +8,19 @@ case "${TLS_MODE:-off}" in
     ;;
   self-signed)
     TLS_CERT_DIR=/etc/letsencrypt/self-signed/bi.kitexp.ru
+    [ -s "$TLS_CERT_DIR/fullchain.pem" ] && [ -s "$TLS_CERT_DIR/privkey.pem" ] || {
+      echo 'Self-signed TLS certificate is missing.' >&2
+      exit 1
+    }
     export TLS_CERT_DIR
     envsubst '$TLS_CERT_DIR' < /etc/nginx/tls.conf.template > /etc/nginx/conf.d/tls.conf
     ;;
   public)
     TLS_CERT_DIR=/etc/letsencrypt/live/bi.kitexp.ru
+    [ -s "$TLS_CERT_DIR/fullchain.pem" ] && [ -s "$TLS_CERT_DIR/privkey.pem" ] || {
+      echo 'Public TLS certificate is missing.' >&2
+      exit 1
+    }
     export TLS_CERT_DIR
     envsubst '$TLS_CERT_DIR' < /etc/nginx/tls.conf.template > /etc/nginx/conf.d/tls.conf
     ;;

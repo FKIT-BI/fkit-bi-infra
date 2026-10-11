@@ -27,14 +27,16 @@ def request(container, url, host, tls=False, trace="edge:test-42"):
     return docker(*args, check=False)
 
 
-def assert_route(container, url, host, tls=False):
+def assert_route(container, url, host, expected_service, expected_path="/check", expected_original="", tls=False):
     result = request(container, url, host, tls=tls)
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload == {
-        "path": "/check",
+        "service": expected_service,
+        "path": expected_path,
         "authorization": "Bearer test-token",
         "trace_id": "edge:test-42",
+        "original_uri": expected_original,
     }, payload
     assert "X-Trace-Id: edge:test-42" in result.stderr, result.stderr
 
@@ -48,6 +50,10 @@ def check_mode(mode):
         cert_dir = (temp / "self-signed/bi.kitexp.ru" if mode == "self-signed"
                     else temp / "live/bi.kitexp.ru")
         cert_dir.mkdir(parents=True)
+        acme_dir = temp / "acme"
+        challenge_dir = acme_dir / ".well-known/acme-challenge"
+        challenge_dir.mkdir(parents=True)
+        (challenge_dir / "test-token").write_text("challenge-ready")
         subprocess.run([
             "openssl", "req", "-x509", "-nodes", "-newkey", "rsa:2048", "-days", "1",
             "-keyout", str(cert_dir / "privkey.pem"),
@@ -67,7 +73,7 @@ server {
   location / {
     default_type application/json;
     add_header X-Trace-Id $http_x_trace_id always;
-    return 200 '{\"path\":\"$request_uri\",\"authorization\":\"$http_authorization\",\"trace_id\":\"$http_x_trace_id\"}';
+    return 200 '{\"service\":\"analytics\",\"path\":\"$request_uri\",\"authorization\":\"$http_authorization\",\"trace_id\":\"$http_x_trace_id\",\"original_uri\":\"$http_x_original_uri\"}';
   }
 }
 server {
@@ -75,7 +81,7 @@ server {
   location / {
     default_type application/json;
     add_header X-Trace-Id $http_x_trace_id always;
-    return 200 '{\"path\":\"$request_uri\",\"authorization\":\"$http_authorization\",\"trace_id\":\"$http_x_trace_id\"}';
+    return 200 '{\"service\":\"generator\",\"path\":\"$request_uri\",\"authorization\":\"$http_authorization\",\"trace_id\":\"$http_x_trace_id\",\"original_uri\":\"$http_x_original_uri\"}';
   }
 }
 server { listen 18083; return 200 'web'; }
@@ -91,11 +97,13 @@ server { listen 18083; return 200 'web'; }
         docker("run", "-d", "--name", container,
                "-e", f"TLS_MODE={mode}",
                "--add-host", "bi.kitexp.ru:127.0.0.1",
-               "--add-host", "node.bi.kitexp.ru:127.0.0.1",
+               "--add-host", "api.bi.kitexp.ru:127.0.0.1",
+               "--add-host", "generator.bi.kitexp.ru:127.0.0.1",
                "-v", f"{conf_dir}:/etc/nginx/conf.d",
                "-v", f"{tls_template}:/etc/nginx/tls.conf.template:ro",
                "-v", f"{ROOT / 'nginx/start.sh'}:/opt/fkit/nginx/start.sh:ro",
                "-v", f"{temp}:/etc/letsencrypt:ro",
+               "-v", f"{acme_dir}:/var/www/certbot:ro",
                NGINX_IMAGE, "/bin/sh", "/opt/fkit/nginx/start.sh")
         try:
             ready = False
@@ -109,7 +117,7 @@ server { listen 18083; return 200 'web'; }
             assert ready, f"{docker('logs', container, check=False).stderr}\n{diagnostics.stdout}\n{diagnostics.stderr}\nlast request: {result.stderr}"
 
             if mode == "off":
-                assert_route(container, "http://127.0.0.1/api/analytics/check", "bi.kitexp.ru")
+                assert_route(container, "http://127.0.0.1/api/analytics/check", "bi.kitexp.ru", "analytics")
                 # TLS is intentionally absent in off mode.
                 tls_attempt = request(container, "https://127.0.0.1/api/analytics/check", "bi.kitexp.ru", tls=True)
                 assert tls_attempt.returncode != 0
@@ -117,22 +125,54 @@ server { listen 18083; return 200 'web'; }
                 redirect = request(container, "http://127.0.0.1/api/analytics/check", "bi.kitexp.ru")
                 assert "301 Moved Permanently" in redirect.stderr, redirect.stderr
                 assert "Location: https://bi.kitexp.ru/api/analytics/check" in redirect.stderr, redirect.stderr
-                assert_route(container, "https://127.0.0.1/api/analytics/check", "bi.kitexp.ru", tls=True)
-                assert_route(container, "https://127.0.0.1/api/generator/check", "node.bi.kitexp.ru", tls=True)
+                assert_route(container, "https://127.0.0.1/api/analytics/check", "bi.kitexp.ru", "analytics", tls=True)
+                assert_route(
+                    container,
+                    "https://127.0.0.1/check?probe=analytics",
+                    "api.bi.kitexp.ru",
+                    "analytics",
+                    expected_path="/check?probe=analytics",
+                    expected_original="/check?probe=analytics",
+                    tls=True,
+                )
+                assert_route(
+                    container,
+                    "https://127.0.0.1/check?probe=generator",
+                    "generator.bi.kitexp.ru",
+                    "generator",
+                    expected_path="/check?probe=generator",
+                    expected_original="/check?probe=generator",
+                    tls=True,
+                )
+                web = request(container, "https://127.0.0.1/", "bi.kitexp.ru", tls=True)
+                assert web.returncode == 0 and web.stdout == "web", (web.stdout, web.stderr)
+
+                for host in ("api.bi.kitexp.ru", "generator.bi.kitexp.ru"):
+                    for path in ("/actuator/prometheus", "/actuator/prometheus/"):
+                        metrics = request(container, f"https://127.0.0.1{path}", host, tls=True)
+                        assert metrics.returncode != 0 and "404 Not Found" in metrics.stderr, metrics.stderr
+
+            challenge = request(
+                container,
+                "http://127.0.0.1/.well-known/acme-challenge/test-token",
+                "api.bi.kitexp.ru",
+            )
+            assert challenge.returncode == 0 and challenge.stdout == "challenge-ready", challenge.stderr
 
             # IP access remains HTTP in all modes.
-            assert_route(container, "http://127.0.0.1/api/generator/check", "45.132.176.28")
+            assert_route(container, "http://127.0.0.1/api/generator/check", "45.132.176.28", "generator")
 
             for app in ("analytics", "generator"):
                 metrics_tls = mode != "off"
                 metrics_scheme = "https" if metrics_tls else "http"
-                metrics = request(
-                    container,
-                    f"{metrics_scheme}://127.0.0.1/api/{app}/actuator/prometheus",
-                    "bi.kitexp.ru",
-                    tls=metrics_tls,
-                )
-                assert metrics.returncode != 0 and "404 Not Found" in metrics.stderr, metrics.stderr
+                for suffix in ("", "/"):
+                    metrics = request(
+                        container,
+                        f"{metrics_scheme}://127.0.0.1/api/{app}/actuator/prometheus{suffix}",
+                        "bi.kitexp.ru",
+                        tls=metrics_tls,
+                    )
+                    assert metrics.returncode != 0 and "404 Not Found" in metrics.stderr, metrics.stderr
         finally:
             docker("rm", "-f", container, check=False)
 

@@ -44,13 +44,12 @@ Compose/nginx-конфигурацию по push в `develop`.
 
 Исторически проверенный endpoint Dev на 2026-10-04: `http://45.132.176.28:8080`.
 Это прежний временный endpoint; текущий Compose публикует только порты 80/443 через
-Nginx, IP остаётся доступен по HTTP на порту 80. Целевая схема сохраняет
-доступ и по публичному IP, и по `bi.kitexp.ru`: домен обслуживается через Nginx на 80/443 с автоматическим
-Certbot DNS-01 для `bi.kitexp.ru` и `*.bi.kitexp.ru`; IP остаётся доступен по HTTP
-без требования HTTPS по IP. Создать только DNS A `bi.kitexp.ru -> 45.132.176.28`;
-отдельные `api.bi.kitexp.ru`, `generator.bi.kitexp.ru` и wildcard A не нужны,
-поскольку API идут по путям одного host. Certbot DNS-01 автоматически создаёт
-временную TXT-запись `_acme-challenge.bi.kitexp.ru` через Yandex Cloud DNS API.
+Nginx, IP остаётся доступен по HTTP на порту 80. Nginx обслуживает Web и
+совместимые `/api/analytics/`, `/api/generator/` на `bi.kitexp.ru`;
+`api.bi.kitexp.ru` проксирует исходные пути в Analytics, а
+`generator.bi.kitexp.ru` — в Generator. Все три A-записи указывают на
+`45.132.176.28`. Доменные HTTP-запросы перенаправляются на HTTPS, кроме
+`/.well-known/acme-challenge/`; IP остаётся доступен по HTTP без HTTPS по IP.
 DNS не задаёт порт. На cloud firewall/security
 group разрешить входящий TCP 80 и 443 на этот сервер; не открывать наружу 8080/5432.
 AAAA публиковать только при рабочем IPv6.
@@ -77,6 +76,14 @@ Infra delivery получает `FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD` из Action
 попадает в журналы. Последующая ротация выполняется отдельно и не сбрасывается
 каждой infra-доставкой.
 
+Для public Dev delivery задайте GitHub Actions variables
+`FKIT_BI_DEV_TLS_MODE=public`, `FKIT_BI_DEV_CERTBOT_CHALLENGE=http-01` и
+`FKIT_BI_DEV_CERTBOT_EMAIL=<контактный email>`, а
+`FKIT_BI_DEV_PUBLIC_URL=https://bi.kitexp.ru`. Delivery валидирует эти значения и
+в private `.env` целево добавляет или заменяет только `TLS_MODE`,
+`CERTBOT_CHALLENGE` и `CERTBOT_EMAIL`; application image references, `GIT_SHA` и
+остальные private values сохраняются.
+
 Для первичного запуска, когда опубликованы все текущие образы, выполните на
 сервере из каталога deployment:
 
@@ -90,20 +97,31 @@ FKIT_BI_DEV_PUBLIC_URL=http://host:port ./scripts/bootstrap-dev.sh
 Certbot не обращается к DNS. `TLS_MODE=self-signed` создаёт certificate/key в
 persistent volume `certbot-data` в отдельном от Certbot public lineage каталоге;
 они сохраняются при перезапуске и браузеры будут
-показывать предупреждение о недоверенном сертификате. `TLS_MODE=public` запрашивает
-SAN `bi.kitexp.ru` и `*.bi.kitexp.ru` через Certbot DNS-01 и Yandex Cloud DNS.
+показывать предупреждение о недоверенном сертификате. `TLS_MODE=public` требует
+`CERTBOT_EMAIL` и выбирает challenge через `CERTBOT_CHALLENGE`:
+
+- `http-01` — текущий режим Dev: exact SAN `bi.kitexp.ru`,
+  `api.bi.kitexp.ru`, `generator.bi.kitexp.ru`; challenge-файлы находятся в
+  persistent volume `certbot-challenges` и доступны по HTTP без redirect;
+- `dns-01` — опциональный прежний режим: `bi.kitexp.ru` и
+  `*.bi.kitexp.ru` через Yandex Cloud DNS API.
+
 При обновлении старой установки unmanaged certificate из прежнего public lineage
 текущие certificate и key сохраняются отдельными обычными файлами в `self-signed`
 перед перемещением старого каталога с относительными Certbot-ссылками.
 
-Для public mode задайте `CERTBOT_EMAIL`, `DNS_ZONE_ID`, `YANDEX_SERVICE_ACCOUNT_ID`,
-`YANDEX_KEY_ID`, `YANDEX_SERVICE_ACCOUNT_KEY_FILE` и `DNS_RECORD_NAME` в private
-`.env`. Ключ service account храните вне Git; выдайте ему только `dns.editor` для
-целевой зоны. При отсутствии сертификата ошибка ACME/DNS останавливает Nginx; при
-ошибке renewal предыдущий certificate остаётся на месте, сообщение пишется в лог,
-следующая проверка повторяется через 12 часов. Auth/cleanup hooks используют
-Yandex Cloud DNS REST API и удаляют только значение challenge, созданное текущим
-запросом. `./scripts/validate.sh` запускает mock DNS tests без production
+Для `http-01` задайте в private `.env` `TLS_MODE=public`,
+`CERTBOT_CHALLENGE=http-01` и `CERTBOT_EMAIL`; Yandex credentials не нужны. Для
+`dns-01` дополнительно задайте `DNS_ZONE_ID`, `YANDEX_SERVICE_ACCOUNT_ID`,
+`YANDEX_KEY_ID`, `YANDEX_SERVICE_ACCOUNT_KEY_FILE` и `DNS_RECORD_NAME`. Ключ
+service account храните вне Git; выдайте ему только `dns.editor` для целевой зоны.
+При первом public HTTP-01 rollout delivery сначала пересоздаёт только proxy в
+`TLS_MODE=off`, чтобы challenge был доступен на порту 80, и переключает proxy на
+TLS только после успешного Certbot. Ошибка выпуска оставляет этот HTTP-контур,
+не записывает успешный infra SHA и не удаляет volumes. При ошибке renewal
+предыдущий certificate остаётся на месте, сообщение пишется в лог, следующая
+проверка повторяется через 12 часов. DNS auth/cleanup hooks удаляют только значение
+challenge, созданное текущим запросом. `./scripts/validate.sh` запускает mock DNS tests без production
 credentials, проверяет HTTP/TLS маршруты через Nginx в режимах `off`,
 `self-signed` и `public`, а также кратковременно поднимает отдельный Compose smoke
 stack с тестовой БД и образами приложений. Smoke test проверяет scrape targets,
@@ -114,12 +132,21 @@ datasource и шесть dashboards, затем по очереди остана
 Ожидание DNS после создания TXT регулируется `DNS_PROPAGATION_WAIT_SECONDS`
 (по умолчанию 20 секунд). Если DNS-01 выдача не проходит, проверьте TXT-запись
 командой `dig TXT _acme-challenge.bi.kitexp.ru` и увеличьте ожидание в приватном
-`.env` до фактической задержки propagation зоны. После выпуска проверьте, что
-SAN сертификата содержит apex `bi.kitexp.ru` и wildcard `*.bi.kitexp.ru`:
+`.env` до фактической задержки propagation зоны. После HTTP-01 выпуска проверьте
+exact SAN сертификата:
 
 ```bash
 echo | openssl s_client -connect bi.kitexp.ru:443 -servername bi.kitexp.ru 2>/dev/null \
   | openssl x509 -noout -ext subjectAltName
+```
+
+В выводе должны быть `DNS:bi.kitexp.ru`, `DNS:api.bi.kitexp.ru` и
+`DNS:generator.bi.kitexp.ru`. Проверки доступности:
+
+```bash
+curl --fail https://bi.kitexp.ru/
+curl --fail https://api.bi.kitexp.ru/actuator/health
+curl --fail https://generator.bi.kitexp.ru/actuator/health
 ```
 
 Периодически проверяйте, что сертификат действителен ещё как минимум 14 дней:
@@ -141,10 +168,14 @@ SSH tunnel. Prometheus и exporters доступны только внутри C
 provisioning создаёт datasource, шесть dashboards и alert rules. Остановка
 Prometheus или Grafana не является readiness-зависимостью Analytics/Generator.
 
-Если публичный выпуск сертификата не удался, проверьте `docker compose ps` и
-последние строки `docker compose logs --tail=100 cert-setup proxy`; не печатайте
-`.env` или ключ service account. Исправьте DNS-записи, доступность Yandex DNS API
-или параметры key/zone, затем повторите `docker compose run --rm cert-setup`.
+Если публичный выпуск сертификата не удался, сохраните вывод шага delivery в
+GitHub Actions и проверьте `docker compose ps` и
+`docker compose logs --tail=100 proxy`; `cert-setup` запускается как one-shot
+контейнер с `--rm`, поэтому его отдельного журнала после завершения нет. Не
+печатайте `.env` или ключ service account. Для HTTP-01 проверьте все три
+A-записи, входящий TCP 80 и доступность challenge URL; для DNS-01 — Yandex DNS
+API и параметры key/zone. Для контролируемого повтора запустите
+`docker compose run --rm -T cert-setup` и сохраните его вывод.
 Пересоздавайте proxy только после успешной подготовки сертификата:
 `docker compose up -d --no-deps --force-recreate proxy`. Пока DNS не восстановлен,
 оставляйте IP-only режим явно заданным как `TLS_MODE=off`; `TLS_MODE=public` не

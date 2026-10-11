@@ -2,6 +2,8 @@
 set -eu
 
 mode="${TLS_MODE:-off}"
+challenge="${CERTBOT_CHALLENGE:-dns-01}"
+webroot="${CERTBOT_WEBROOT:-/var/www/certbot}"
 self_signed_dir=/etc/letsencrypt/self-signed/bi.kitexp.ru
 public_live_dir=/etc/letsencrypt/live/bi.kitexp.ru
 
@@ -47,15 +49,6 @@ case "$mode" in
     ;;
   public)
     : "${CERTBOT_EMAIL:?CERTBOT_EMAIL is required for TLS_MODE=public}"
-    : "${DNS_ZONE_ID:?DNS_ZONE_ID is required for TLS_MODE=public}"
-    : "${YANDEX_SERVICE_ACCOUNT_ID:?YANDEX_SERVICE_ACCOUNT_ID is required for TLS_MODE=public}"
-    : "${YANDEX_KEY_ID:?YANDEX_KEY_ID is required for TLS_MODE=public}"
-    key_file="${YANDEX_SERVICE_ACCOUNT_KEY_FILE:-/run/secrets/yandex-service-account-key.json}"
-    test -s "$key_file" || {
-      echo 'Yandex service-account key file is missing.' >&2
-      exit 1
-    }
-    python3 /opt/fkit/certbot/yandex_dns.py validate
     if [ -d "$public_live_dir" ] && [ ! -s /etc/letsencrypt/renewal/bi.kitexp.ru.conf ]; then
       legacy_dir="/etc/letsencrypt/self-signed/legacy-bi.kitexp.ru-$(date +%s)"
       mkdir -p /etc/letsencrypt/self-signed
@@ -69,11 +62,35 @@ case "$mode" in
       mv "$public_live_dir" "$legacy_dir"
       echo "Saved the unmanaged legacy certificate and key at $legacy_dir.fullchain.pem and $legacy_dir.privkey.pem."
     fi
-    certbot certonly --non-interactive --agree-tos --email "$CERTBOT_EMAIL" \
-      --manual --preferred-challenges dns \
-      --manual-auth-hook 'python3 /opt/fkit/certbot/yandex_dns.py auth' \
-      --manual-cleanup-hook 'python3 /opt/fkit/certbot/yandex_dns.py cleanup' \
-      --cert-name bi.kitexp.ru -d bi.kitexp.ru -d '*.bi.kitexp.ru'
+    case "$challenge" in
+      http-01)
+        mkdir -p "$webroot/.well-known/acme-challenge"
+        certbot certonly --non-interactive --agree-tos --email "$CERTBOT_EMAIL" \
+          --webroot --webroot-path "$webroot" --preferred-challenges http \
+          --cert-name bi.kitexp.ru \
+          -d bi.kitexp.ru -d api.bi.kitexp.ru -d generator.bi.kitexp.ru
+        ;;
+      dns-01)
+        : "${DNS_ZONE_ID:?DNS_ZONE_ID is required for public DNS-01}"
+        : "${YANDEX_SERVICE_ACCOUNT_ID:?YANDEX_SERVICE_ACCOUNT_ID is required for public DNS-01}"
+        : "${YANDEX_KEY_ID:?YANDEX_KEY_ID is required for public DNS-01}"
+        key_file="${YANDEX_SERVICE_ACCOUNT_KEY_FILE:-/run/secrets/yandex-service-account-key.json}"
+        test -s "$key_file" || {
+          echo 'Yandex service-account key file is missing.' >&2
+          exit 1
+        }
+        python3 /opt/fkit/certbot/yandex_dns.py validate
+        certbot certonly --non-interactive --agree-tos --email "$CERTBOT_EMAIL" \
+          --manual --preferred-challenges dns \
+          --manual-auth-hook 'python3 /opt/fkit/certbot/yandex_dns.py auth' \
+          --manual-cleanup-hook 'python3 /opt/fkit/certbot/yandex_dns.py cleanup' \
+          --cert-name bi.kitexp.ru -d bi.kitexp.ru -d '*.bi.kitexp.ru'
+        ;;
+      *)
+        echo "Unsupported CERTBOT_CHALLENGE: $challenge" >&2
+        exit 2
+        ;;
+    esac
     ;;
   *)
     echo "Unsupported TLS_MODE: $mode" >&2

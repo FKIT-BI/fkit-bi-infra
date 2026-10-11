@@ -8,6 +8,10 @@ case "$sha" in
   *[!0-9a-f]*|'') echo 'Infra SHA must be lowercase hexadecimal.' >&2; exit 2 ;;
 esac
 
+FKIT_BI_DEV_TLS_MODE="${FKIT_BI_DEV_TLS_MODE:-off}"
+FKIT_BI_DEV_CERTBOT_CHALLENGE="${FKIT_BI_DEV_CERTBOT_CHALLENGE:-dns-01}"
+FKIT_BI_DEV_CERTBOT_EMAIL="${FKIT_BI_DEV_CERTBOT_EMAIL:-}"
+
 for setting in \
   FKIT_BI_DEV_HOST FKIT_BI_DEV_SSH_USER FKIT_BI_DEV_SSH_PORT \
   FKIT_BI_DEV_DEPLOY_PATH FKIT_BI_DEV_PUBLIC_URL \
@@ -18,6 +22,24 @@ for setting in \
     exit 2
   fi
 done
+case "$FKIT_BI_DEV_TLS_MODE" in
+  off|self-signed|public) ;;
+  *) echo 'Dev TLS mode must be off, self-signed, or public.' >&2; exit 2 ;;
+esac
+if [[ "$FKIT_BI_DEV_TLS_MODE" == public ]]; then
+  case "$FKIT_BI_DEV_CERTBOT_CHALLENGE" in
+    dns-01|http-01) ;;
+    *) echo 'Dev Certbot challenge must be dns-01 or http-01.' >&2; exit 2 ;;
+  esac
+  if [[ ! "$FKIT_BI_DEV_CERTBOT_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
+    echo 'Dev Certbot email has an invalid format.' >&2
+    exit 2
+  fi
+  if [[ "$FKIT_BI_DEV_PUBLIC_URL" != 'https://bi.kitexp.ru' ]]; then
+    echo 'Public TLS delivery requires FKIT_BI_DEV_PUBLIC_URL=https://bi.kitexp.ru.' >&2
+    exit 2
+  fi
+fi
 if [[ ! "$FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD" =~ ^[0-9a-f]{64}$ ]]; then
   echo 'Dev Grafana admin secret must be 64 lowercase hexadecimal characters.' >&2
   exit 2
@@ -79,12 +101,15 @@ scp "${scp_opts[@]}" "$grafana_password_file" "$remote:$remote_password_file"
 # The heredoc is literal: only positional arguments cross the trust boundary.
 # shellcheck disable=SC2029
 ssh "${ssh_opts[@]}" "$remote" \
-  "flock -w 300 /tmp/fkit-bi-deploy.lock bash -s -- '$sha' '$FKIT_BI_DEV_DEPLOY_PATH' '$remote_bundle' '$remote_password_file'" <<'REMOTE'
+  "flock -w 300 /tmp/fkit-bi-deploy.lock bash -s -- '$sha' '$FKIT_BI_DEV_DEPLOY_PATH' '$remote_bundle' '$remote_password_file' '$FKIT_BI_DEV_TLS_MODE' '$FKIT_BI_DEV_CERTBOT_CHALLENGE' '$FKIT_BI_DEV_CERTBOT_EMAIL'" <<'REMOTE'
 set -euo pipefail
 sha="$1"
 path="$2"
 bundle="$3"
 password_file="$4"
+tls_mode="$5"
+certbot_challenge="$6"
+certbot_email="$7"
 preflight_dir=''
 cleanup() {
   if [[ -n "$preflight_dir" ]]; then
@@ -93,6 +118,21 @@ cleanup() {
   rm -f "$bundle" "$password_file"
 }
 trap cleanup EXIT
+
+case "$tls_mode" in
+  off|self-signed|public) ;;
+  *) echo 'Remote TLS mode validation failed.' >&2; exit 1 ;;
+esac
+if [[ "$tls_mode" == public ]]; then
+  case "$certbot_challenge" in
+    dns-01|http-01) ;;
+    *) echo 'Remote Certbot challenge validation failed.' >&2; exit 1 ;;
+  esac
+  if [[ ! "$certbot_email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
+    echo 'Remote Certbot email validation failed.' >&2
+    exit 1
+  fi
+fi
 
 cd "$path"
 if [[ ! -f .env ]]; then
@@ -142,6 +182,31 @@ if [[ "$grafana_needs_reset" == 1 ]]; then
   : > .fkit-bi-grafana-bootstrap-pending
   chmod 600 .fkit-bi-grafana-bootstrap-pending
 fi
+
+update_env_setting() {
+  local key="$1" value="$2" env_tmp found=0
+  env_tmp="$(mktemp .env.XXXXXX)"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == "$key="* ]]; then
+      if [[ "$found" == 0 ]]; then
+        printf '%s=%s\n' "$key" "$value" >> "$env_tmp"
+        found=1
+      fi
+    else
+      printf '%s\n' "$line" >> "$env_tmp"
+    fi
+  done < .env
+  if [[ "$found" == 0 ]]; then
+    printf '%s=%s\n' "$key" "$value" >> "$env_tmp"
+  fi
+  chmod 600 "$env_tmp"
+  mv -f "$env_tmp" .env
+}
+update_env_setting TLS_MODE "$tls_mode"
+if [[ "$tls_mode" == public ]]; then
+  update_env_setting CERTBOT_CHALLENGE "$certbot_challenge"
+  update_env_setting CERTBOT_EMAIL "$certbot_email"
+fi
 env_checksum_before="$(sha256sum .env)"
 
 # The runner transfers a verified Git bundle so the Dev host needs no GitHub
@@ -174,12 +239,26 @@ docker compose config --quiet
 # Keep application image references unchanged. Build the pinned Certbot helper,
 # then reconcile infrastructure and monitoring services; never recreate web.
 docker compose build cert-setup
-docker compose run --rm -T cert-setup </dev/null
-docker compose up -d --no-build --pull never postgres analytics generator
-docker compose up -d --no-build --pull never --no-recreate web
 if ! docker image inspect nginx:1.27-alpine >/dev/null 2>&1; then
   docker compose pull proxy
 fi
+if [[ "$tls_mode" == public && "$certbot_challenge" == http-01 ]]; then
+  docker compose run --rm -T --no-deps --entrypoint /bin/sh cert-setup \
+    -c 'mkdir -p /var/www/certbot/.well-known/acme-challenge && printf challenge-ready > /var/www/certbot/.well-known/acme-challenge/fkit-bi-listener-probe' </dev/null
+  listener_body="$(docker compose exec -T proxy wget -qO- \
+    --header='Host: bi.kitexp.ru' \
+    http://127.0.0.1/.well-known/acme-challenge/fkit-bi-listener-probe \
+    2>/dev/null || true)"
+  docker compose run --rm -T --no-deps --entrypoint /bin/sh cert-setup \
+    -c 'rm -f /var/www/certbot/.well-known/acme-challenge/fkit-bi-listener-probe' </dev/null
+  if [[ "$listener_body" != challenge-ready ]]; then
+    echo 'Preparing the HTTP-01 challenge listener before certificate issuance.'
+    TLS_MODE=off docker compose up -d --no-build --pull never --no-deps --force-recreate proxy
+  fi
+fi
+docker compose run --rm -T cert-setup </dev/null
+docker compose up -d --no-build --pull never postgres analytics generator
+docker compose up -d --no-build --pull never --no-recreate web
 docker compose up -d --no-build --pull never --no-deps --force-recreate proxy
 docker compose pull prometheus grafana postgres-exporter node-exporter
 docker compose up -d --no-build --pull never prometheus grafana postgres-exporter node-exporter
@@ -204,5 +283,11 @@ printf '%s\n' "$sha" > .fkit-bi-infra-sha
 docker compose ps
 REMOTE
 
-"$root/scripts/healthcheck.sh" "$FKIT_BI_DEV_PUBLIC_URL"
+if [[ "$FKIT_BI_DEV_TLS_MODE" == public ]]; then
+  "$root/scripts/healthcheck.sh" "$FKIT_BI_DEV_PUBLIC_URL" \
+    'https://api.bi.kitexp.ru/actuator/health' \
+    'https://generator.bi.kitexp.ru/actuator/health'
+else
+  "$root/scripts/healthcheck.sh" "$FKIT_BI_DEV_PUBLIC_URL"
+fi
 printf 'Infra delivery succeeded: %s\n' "$sha"

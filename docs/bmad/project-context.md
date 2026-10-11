@@ -14,3 +14,10 @@ analytics, generator и web образы опубликованы и доста�
 Delivery работает через `develop` и host-wide lock, сохраняет private `.env` и
 PostgreSQL volume. Подробные run IDs и актуальные SHA записаны в
 `docs/dev-deployment.md`.
+
+Публичный edge использует три точных имени: `bi.kitexp.ru` для Web и совместимых
+path-based API, `api.bi.kitexp.ru` для Analytics и
+`generator.bi.kitexp.ru` для Generator. Текущий Dev rollout использует
+Certbot HTTP-01 с общим persistent webroot и exact-SAN сертификатом; DNS-01
+apex+wildcard остаётся опциональным режимом. При TLS доменный HTTP перенаправляется
+на HTTPS, ACME challenge остаётся на HTTP, а доступ по IP сохраняется по HTTP.

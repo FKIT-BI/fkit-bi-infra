@@ -47,6 +47,7 @@ services:
     image: fkit-bi-certbot:local
     environment:
       TLS_MODE: ${TLS_MODE:-off}
+      CERTBOT_CHALLENGE: ${CERTBOT_CHALLENGE:-dns-01}
       CERTBOT_EMAIL: ${CERTBOT_EMAIL:-}
       DNS_ZONE_ID: ${DNS_ZONE_ID:-}
       DNS_RECORD_NAME: ${DNS_RECORD_NAME:-_acme-challenge.bi.kitexp.ru.}
@@ -55,6 +56,7 @@ services:
       YANDEX_KEY_ID: ${YANDEX_KEY_ID:-}
     volumes:
       - certbot-data:/etc/letsencrypt
+      - certbot-challenges:/var/www/certbot
       - ./certbot:/opt/fkit/certbot:ro
       - type: bind
         source: ${YANDEX_SERVICE_ACCOUNT_KEY_FILE:-./certbot/yandex-key.example.json}
@@ -66,6 +68,7 @@ services:
     image: fkit-bi-certbot:local
     environment:
       TLS_MODE: ${TLS_MODE:-off}
+      CERTBOT_CHALLENGE: ${CERTBOT_CHALLENGE:-dns-01}
       CERTBOT_EMAIL: ${CERTBOT_EMAIL:-}
       DNS_ZONE_ID: ${DNS_ZONE_ID:-}
       DNS_RECORD_NAME: ${DNS_RECORD_NAME:-_acme-challenge.bi.kitexp.ru.}
@@ -74,6 +77,7 @@ services:
       DNS_PROPAGATION_WAIT_SECONDS: ${DNS_PROPAGATION_WAIT_SECONDS:-20}
     volumes:
       - certbot-data:/etc/letsencrypt
+      - certbot-challenges:/var/www/certbot
       - ./certbot:/opt/fkit/certbot:ro
       - type: bind
         source: ${YANDEX_SERVICE_ACCOUNT_KEY_FILE:-./certbot/yandex-key.example.json}
@@ -102,6 +106,7 @@ services:
       - ./nginx/tls.conf.template:/etc/nginx/tls.conf.template:ro
       - ./nginx/start.sh:/opt/fkit/nginx/start.sh:ro
       - certbot-data:/etc/letsencrypt:ro
+      - certbot-challenges:/var/www/certbot:ro
     command: ["/bin/sh", "/opt/fkit/nginx/start.sh"]
     depends_on:
       cert-setup: {condition: service_completed_successfully}
@@ -173,5 +178,6 @@ networks:
 volumes:
   postgres-data:
   certbot-data:
+  certbot-challenges:
   prometheus-data:
   grafana-data:
