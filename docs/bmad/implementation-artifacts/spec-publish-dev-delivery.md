@@ -110,6 +110,7 @@ context:
 - `medium` / `patch` — В recalculation dashboard legends запрашивали `application/outcome` при группировке по `job_type` или одному `outcome`; шаблоны приведены к выдаваемым labels.
 - `medium` / `patch` — Provisioned панели будущих метрик не отличали отсутствие instrumentation от runtime failure; спецификация dashboard теперь отмечает planned метрики и API для сверки.
 - `high` / `patch` — Dev preflight обнаружил placeholder `GRAFANA_ADMIN_PASSWORD` и блокировал infra delivery до применения новой конфигурации и proxy. Добавлены scoped GitHub Actions secret и безопасный initial bootstrap с повторяемым reset для уже созданной Grafana DB; значение секрета не хранится в репозитории и не выводится в логи.
+- `high` / `patch` — На Dev статический IP proxy совпадал с адресом, который Docker динамически выдавал Web; Compose startup завершался `Address already in use`. Стандартный proxy IP перенесён на `172.29.0.250`, вне диапазона низких динамических адресов; изолированный smoke test использует последний host subnet.
 
 ## Design Notes
 
@@ -117,7 +118,7 @@ Service-level healthcheck остаётся локальным после restart
 
 ## Verification
 
-**Текущая попытка исправления (2026-10-11):** причиной текущей остановки Dev delivery был placeholder Grafana admin password на хосте. Секрет Actions настроен; локальные delivery stubs, `bash -n` и `git diff --check` прошли. Полный `scripts/validate.sh` выполняется; исправление ещё не опубликовано и фактический повторный deploy ожидает его push. Исторические результаты ниже относятся к предыдущему состоянию стенда и не подтверждают текущую готовность.
+**Текущая попытка исправления (2026-10-11):** после устранения первичного preflight-блокера доставка выявила рассинхронизацию Docker network и конфликт фиксированного IP proxy с динамическим адресом Web. Основной стек восстановлен без удаления volumes: PostgreSQL, Analytics, Generator, Web и Nginx healthy; внешний `/` и readiness обоих API отвечают HTTP 200. Кодовое исправление адреса proxy проходит config/stubbed delivery checks; штатный повторный delivery после push ожидает запуска. Grafana отдельно не проверялась и не считается критерием текущего восстановления.
 
 **Commands:**
 

@@ -169,7 +169,7 @@ def main():
         "GRAFANA_ADMIN_PASSWORD": "replace-with-a-grafana-secret",
     })
     env["COMPOSE_SUBNET"] = available_compose_subnet()
-    env["PROXY_CONTAINER_IP"] = str(next(ipaddress.ip_network(env["COMPOSE_SUBNET"]).hosts()) + 1)
+    env["PROXY_CONTAINER_IP"] = str(ipaddress.ip_network(env["COMPOSE_SUBNET"])[-2])
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         env["GRAFANA_PORT"] = str(listener.getsockname()[1])
