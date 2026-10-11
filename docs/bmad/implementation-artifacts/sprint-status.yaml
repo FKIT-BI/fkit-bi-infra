@@ -45,10 +45,10 @@ development_status:
 
   epic-2: in-progress
   2-1-enterprise-and-shift-calendar: review
-  2-2-lines-and-machine-assignment: backlog
-  2-3-component-and-signal-configuration: backlog
-  2-4-machine-state-configuration: backlog
-  2-5-configuration-journey: backlog
+  2-2-lines-and-machine-assignment: review
+  2-3-component-and-signal-configuration: review
+  2-4-machine-state-configuration: review
+  2-5-configuration-journey: in-progress
   epic-2-retrospective: optional
 
   epic-3: backlog

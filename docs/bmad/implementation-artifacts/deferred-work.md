@@ -4,3 +4,15 @@
 - source_spec: `fkit-bi-infra/docs/bmad/implementation-artifacts/spec-2-1-enterprise-and-shift-calendar.md`
   summary: При реализации telemetry first-use writer и analytics projection writer согласовать их транзакции с блокировкой строки Enterprise, используемой timezone- и shift-lock проверками.
   evidence: Текущие writers ещё не реализованы; спецификация ingestion задаёт advisory lock на signal, но не подтверждает сериализацию по Enterprise, а projection writer пока отсутствует. Проверить обе транзакционные последовательности при появлении writers и добавить конкурентные проверки timezone/shift usage.
+- source_spec: `fkit-bi-infra/docs/bmad/implementation-artifacts/spec-epic-2-equipment-configuration.md`
+  summary: Web owner должен завершить story 2.5: при открытии существующей машины загружать сохранённую MachineStateConfig, чтобы повторное сохранение не затирало её дефолтным черновиком.
+  evidence: Review обнаружил, что текущий Web flow получает readiness/components/signals, но не вызывает документированный `GET /machines/{machineId}/state-configuration`; backend API и OpenAPI уже предоставляют чтение.
+- source_spec: `fkit-bi-infra/docs/bmad/implementation-artifacts/spec-epic-2-equipment-configuration.md`
+  summary: Web owner должен предоставить по AC-1 создание двух смен предприятия до завершения setup journey.
+  evidence: Acceptance Catalog AC-1 требует создать Enterprise с двумя непересекающимися shift definitions; существующий UI показывает выбор timezone, но не вызывает `POST /enterprises/{enterpriseId}/shifts`, хотя Analytics API/OpenAPI поддерживают создание смен.
+- source_spec: `fkit-bi-infra/docs/bmad/implementation-artifacts/spec-epic-2-equipment-configuration.md`
+  summary: Web owner должен дать оператору возможность задавать собственный `customSemanticCode` для Signal с `semanticCode=CUSTOM`.
+  evidence: Текущая форма жёстко отправляет `CUSTOM_VALUE`; Analytics валидирует стабильный код от клиента и контракт уже публикует поле.
+- source_spec: `fkit-bi-infra/docs/bmad/implementation-artifacts/spec-epic-2-equipment-configuration.md`
+  summary: Web owner должен решить и реализовать редактирование/отключение существующих конфигурационных объектов в UX.
+  evidence: Текущий интерфейс сценария настройки содержит создание объектов, но не редактирование и смену статусов, хотя Analytics API предоставляет соответствующие CRUD/status операции; ответственность за UI закреплена за Web-разработчиком.
