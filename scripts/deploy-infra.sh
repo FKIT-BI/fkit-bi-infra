@@ -187,7 +187,7 @@ if [[ "$grafana_needs_reset" == 1 ]]; then
   reset_ok=0
   for attempt in $(seq 1 12); do
     if docker compose exec -T grafana grafana cli admin reset-admin-password \
-      "$grafana_bootstrap_password" >/dev/null 2>&1; then
+      "$grafana_bootstrap_password" </dev/null >/dev/null 2>&1; then
       reset_ok=1
       break
     fi

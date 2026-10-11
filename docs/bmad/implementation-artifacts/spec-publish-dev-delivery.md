@@ -111,7 +111,7 @@ context:
 - `medium` / `patch` — Provisioned панели будущих метрик не отличали отсутствие instrumentation от runtime failure; спецификация dashboard теперь отмечает planned метрики и API для сверки.
 - `high` / `patch` — Dev preflight обнаружил placeholder `GRAFANA_ADMIN_PASSWORD` и блокировал infra delivery до применения новой конфигурации и proxy. Добавлены scoped GitHub Actions secret и безопасный initial bootstrap с повторяемым reset для уже созданной Grafana DB; значение секрета не хранится в репозитории и не выводится в логи.
 - `high` / `patch` — На Dev статический IP proxy совпадал с адресом, который Docker динамически выдавал Web; Compose startup завершался `Address already in use`. Стандартный proxy IP перенесён на `172.29.0.250`, вне диапазона низких динамических адресов; изолированный smoke test использует последний host subnet.
-- `critical` / `patch` — `docker compose run cert-setup` читал оставшийся stdin удалённой Bash-сессии, поэтому скрипт незаметно прекращался после шага Certbot; внешние healthchecks уже работающих сервисов маскировали неполную доставку. Для one-off команды stdin закрыт, а delivery test теперь проверяет и моделирует его потребление.
+- `critical` / `patch` — `docker compose run` и `docker compose exec` читали оставшийся stdin удалённой Bash-сессии, поэтому скрипт мог незаметно прекращаться после одного из attached-шагов; внешние healthchecks уже работающих сервисов маскировали неполную доставку. Для обеих команд stdin закрыт, а delivery test моделирует его потребление и проверяет завершающие шаги.
 
 ## Design Notes
 
@@ -119,7 +119,7 @@ Service-level healthcheck остаётся локальным после restart
 
 ## Verification
 
-**Текущая попытка исправления (2026-10-11):** после первичного preflight-блокера выявлены рассинхронизация Docker network, конфликт фиксированного IP proxy с динамическим адресом Web и неполный remote deploy из-за потребления stdin. Основной стек восстановлен без удаления volumes: PostgreSQL, Analytics, Generator, Web и Nginx healthy; внешний `/` и readiness обоих API отвечают HTTP 200. Workflow `38155759520` завершился зелёным, но не выполнил команды после Certbot; marker SHA остался старым, поэтому этот run не считается полной доставкой. Исправление stdin закрытия добавлено; повторный workflow ожидает push.
+**Текущая попытка исправления (2026-10-11):** после первичного preflight-блокера выявлены рассинхронизация Docker network, конфликт фиксированного IP proxy с динамическим адресом Web и неполный remote deploy из-за потребления stdin. Основной стек восстановлен без удаления volumes: PostgreSQL, Analytics, Generator, Web и Nginx healthy; внешний `/` и readiness обоих API отвечают HTTP 200. Workflow `38155759520` завершился зелёным, но не выполнил команды после Certbot; в следующем run monitoring сервисы появились, но SHA marker остался старым, указывая на повторное stdin-поглощение в Grafana exec. Оба attached-вызова теперь получают `/dev/null`; полный delivery ожидает очередного run.
 
 **Commands:**
 

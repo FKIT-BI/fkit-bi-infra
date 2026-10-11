@@ -156,6 +156,8 @@ fi
 if [[ "$*" == *'grafana cli admin reset-admin-password '* ]]; then
   printf 'docker compose exec -T grafana grafana cli admin reset-admin-password [REDACTED]\n' \
     >> "$FKIT_BI_TEST_DELIVERY_LOG"
+  # Model Compose exec consuming the remote script's stdin if it is left open.
+  cat >/dev/null
   exit 0
 fi
 printf 'docker %s\n' "$*" >> "$FKIT_BI_TEST_DELIVERY_LOG"
