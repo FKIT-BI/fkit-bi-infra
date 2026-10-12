@@ -48,6 +48,7 @@ server {
 
   location /api/analytics/ {
     proxy_pass http://analytics:8080/;
+    proxy_redirect /swagger-ui/ /api/analytics/swagger-ui/;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Prefix /api/analytics;
     proxy_set_header X-Forwarded-Proto https;
@@ -57,6 +58,7 @@ server {
   }
   location /api/generator/ {
     proxy_pass http://generator:8080/;
+    proxy_redirect /swagger-ui/ /api/generator/swagger-ui/;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Prefix /api/generator;
     proxy_set_header X-Forwarded-Proto https;
