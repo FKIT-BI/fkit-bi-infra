@@ -71,8 +71,11 @@ context:
 
 DEV workflows подготовлены для общей Machine Identity `github-infra-dev`
 (`6214b351-e1af-4180-9e74-e20e1073a97b`) через Actions variable
-`FKIT_BI_INFISICAL_IDENTITY_ID`; на момент записи variable в GitHub ещё не
-установлена. Audience явно задан как `https://github.com/FKIT-BI`; issuer —
+`FKIT_BI_INFISICAL_IDENTITY_ID`; variable установлена в GitHub с visibility
+`selected` для ровно четырёх репозиториев. Первый live-run Analytics завершил
+verify и публикацию, но OIDC был отклонён с `claim not allowed`; точное поле
+claims нужно сверить в Infisical. Audience явно задан как
+`https://github.com/FKIT-BI`; issuer —
 `https://token.actions.githubusercontent.com`. Требуемая конфигурация Infisical
 должна ограничивать claims этими четырьмя репозиториями и
 `refs/heads/develop`, `event_name=push` и точным `workflow_ref`

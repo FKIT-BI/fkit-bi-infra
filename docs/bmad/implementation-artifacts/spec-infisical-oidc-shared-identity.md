@@ -49,7 +49,7 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] Установить Actions Variable `FKIT_BI_INFISICAL_IDENTITY_ID=6214b351-e1af-4180-9e74-e20e1073a97b` только для четырёх репозиториев; оставить `FKIT_BI_INFISICAL_PROJECT_SLUG=fkit-bi-ti-mx` без изменений. На этом этапе внешние изменения запрещены правилами bmad-build.
+- [x] Установить Actions Variable `FKIT_BI_INFISICAL_IDENTITY_ID=6214b351-e1af-4180-9e74-e20e1073a97b` только для четырёх репозиториев; оставить `FKIT_BI_INFISICAL_PROJECT_SLUG=fkit-bi-ti-mx` без изменений. GitHub API подтвердил visibility `selected` и ровно четыре требуемых repository IDs.
 - [x] В четырёх `ci.yml` явно задать `oidc-audience: https://github.com/FKIT-BI`; сохранить `id-token: write` исключительно для deploy job, action SHA, environment, индивидуальные пути и ограничения deploy.
 - [x] Обновить `fkit-bi-infra/scripts/test-runtime-contracts.py` и `fkit-bi-infra/docs/ci-cd.md`, чтобы единая identity, audience, project/env, пути, permissions и gating были проверяемы и документированы.
 - [ ] Провести изменения в `develop`; проверить живые OIDC/read/deploy/health в каждом DEV workflow. Локальный контрактный тест выполнен; push/remote операции запрещены текущим build workflow. При последующей проверке блокеры локализовать без ослабления claims.
@@ -61,7 +61,7 @@ context:
 
 ## Implementation Notes
 
-На момент планирования локальные workflows уже содержат корректные job-level permissions, action SHA, project/environment и пути. GitHub API подтвердил owner `FKIT-BI`, отсутствие identity variable и наличие project slug variable. По официальному поведению GitHub стандартная audience равна URL owner; явный override вносится для однозначной проверки. Права Infisical, OIDC claims и фактическая доступность secrets проверяются только live workflow. Старый `FKIT_BI_GITHUB_TOKEN` нужен приватным cross-repo checkout и остаётся вне области удаления.
+На момент планирования локальные workflows уже содержали корректные job-level permissions, action SHA, project/environment и пути. Actions variable identity теперь создана с visibility `selected` ровно для четырёх нужных репозиториев; project slug variable сохранена. По официальному поведению GitHub стандартная audience равна URL owner; явный override внесён для однозначной проверки. Первый Analytics DEV push-run успешно выполнил verify и publish, но Infisical завершился `401 Access denied: OIDC claim not allowed`. Claims и folder grants не просмотрены через Infisical и требуют исправления/подтверждения в его UI или audit log. Старый `FKIT_BI_GITHUB_TOKEN` нужен приватным cross-repo checkout и остаётся вне области удаления.
 
 Реализация подготовлена на локальных feature branches в worktrees; исходные checkout и `.gigaide/` сохранены. Текущий этап не разрешает push или удалённые операции, поэтому GitHub variable, PR/merge, OIDC grant и live DEV проверки остаются невыполненными.
 

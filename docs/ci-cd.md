@@ -71,10 +71,11 @@ Variables, репозиторий, `.env.example` или логи.
 Четыре DEV deploy workflow подготовлены для общей Machine Identity
 `github-infra-dev` (`6214b351-e1af-4180-9e74-e20e1073a97b`) через Actions
 variable `FKIT_BI_INFISICAL_IDENTITY_ID`. До установки этой variable в GitHub
-получение secrets не заработает. Создайте её в организации с доступом ровно к
-`fkit-bi-infra`, `fkit-bi-analytics`, `fkit-bi-generator` и `fkit-bi-web`.
-Существующая `FKIT_BI_INFISICAL_PROJECT_SLUG=fkit-bi-ti-mx` остаётся без
-изменений. Во всех четырёх шагах Infisical явно указан audience
+получение secrets не заработает. Org variable создана со значением этого UUID
+и visibility `selected` ровно для `fkit-bi-infra`, `fkit-bi-analytics`,
+`fkit-bi-generator` и `fkit-bi-web` (проверено через GitHub API). Существующая
+`FKIT_BI_INFISICAL_PROJECT_SLUG=fkit-bi-ti-mx` остаётся без изменений. Во всех
+четырёх шагах Infisical явно указан audience
 `https://github.com/FKIT-BI`; Infisical domain — `https://secrets.kitexp.ru`,
 environment — `dev`.
 
@@ -94,6 +95,14 @@ workflow не смогут использовать identity, даже если 
 identity у `pull_request`, feature refs и `workflow_dispatch`. Секреты не должны
 появляться в логах или artifacts. Старые Actions secrets не удаляйте в рамках
 этой интеграции.
+
+Первый DEV-run Analytics после добавления variable (`38222779544`) завершил
+verify и публикацию образа, но шаг Infisical вернул `401 Access denied: OIDC
+claim not allowed`. Если в настройке `repository` указаны значения из старого
+описания с точкой (`FKIT-BI/fkit.bi-*`), замените их на фактические имена с
+дефисом из списка выше. После исправления повторите deploy и убедитесь, что
+OIDC audit log подтверждает ожидаемые `repository`, `ref`, `event_name` и
+`workflow_ref`.
 
 ## Проверка результата
 
