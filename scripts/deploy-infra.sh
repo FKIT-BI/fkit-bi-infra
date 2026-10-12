@@ -238,7 +238,7 @@ docker compose config --quiet
 
 # Keep application image references unchanged. Build the pinned Certbot helper,
 # then reconcile infrastructure and monitoring services; never recreate web.
-docker compose build cert-setup
+docker compose build cert-setup </dev/null
 if ! docker image inspect nginx:1.27-alpine >/dev/null 2>&1; then
   docker compose pull proxy
 fi
@@ -248,7 +248,7 @@ if [[ "$tls_mode" == public && "$certbot_challenge" == http-01 ]]; then
   listener_body="$(docker compose exec -T proxy wget -qO- \
     --header='Host: bi.kitexp.ru' \
     http://127.0.0.1/.well-known/acme-challenge/fkit-bi-listener-probe \
-    2>/dev/null || true)"
+    2>/dev/null </dev/null || true)"
   docker compose run --rm -T --no-deps --entrypoint /bin/sh cert-setup \
     -c 'rm -f /var/www/certbot/.well-known/acme-challenge/fkit-bi-listener-probe' </dev/null
   if [[ "$listener_body" != challenge-ready ]]; then

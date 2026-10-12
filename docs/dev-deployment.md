@@ -57,18 +57,20 @@ AAAA публиковать только при рабочем IPv6.
 (режим 600, никогда не коммитится); PostgreSQL хранится в named volume
 `postgres-data`. Никогда не выполняйте `docker compose down -v`.
 
-### Текущее состояние (2026-10-11)
+### Исторический сбой delivery (2026-10-11)
 
 Инфраструктурный CI run [38150249821](https://github.com/FKIT-BI/fkit-bi-infra/actions/runs/38150249821)
 успешно выполнил `verify`, но Dev delivery остановился на удалённом preflight:
 в приватном `/opt/fkit-bi/.env` остался placeholder `GRAFANA_ADMIN_PASSWORD`.
 Infra SHA не применён этим run. Внешняя диагностика по старому `:8080` показала
 HTTP 200 для `/`, 502 для Analytics health и timeout для Generator health; на
-порту 80 корректного HTTP-ответа не было. Поэтому стенд сейчас не считается
-готовым, даже если главная страница на прежнем порту отображается. Actions URL
+порту 80 корректного HTTP-ответа не было. На тот момент стенд не считался
+готовым, даже если главная страница на прежнем порту отображалась. Actions URL
 для healthcheck уже переключён на `http://45.132.176.28`, как соответствует
 публикации Nginx на порту 80. Повторить delivery после установки непустого
 Grafana-пароля в приватном `.env`; значения секретов не выводить в логи.
+
+Этот снимок устарел после успешной HTTPS-доставки 2026-10-12, зафиксированной ниже.
 
 Infra delivery получает `FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD` из Actions secret.
 Если в `.env` ещё стоит известный placeholder, доставка запишет значение в файл
@@ -90,6 +92,21 @@ Infra delivery получает `FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD` из Action
 ```bash
 FKIT_BI_DEV_PUBLIC_URL=http://host:port ./scripts/bootstrap-dev.sh
 ```
+
+### Текущее состояние (2026-10-12)
+
+Infra SHA `47db405ad4c6a585e10aaa8f8634ce90168235e4` успешно прошёл verify и Dev
+delivery в [CI run 38164570249, attempt 3](https://github.com/FKIT-BI/fkit-bi-infra/actions/runs/38164570249/attempts/3).
+Сертификат Let’s Encrypt выдан для `bi.kitexp.ru`, `api.bi.kitexp.ru` и
+`generator.bi.kitexp.ru`, действителен до 2027-01-10. Web и все четыре
+path-based/direct actuator health URL отвечают `200`; API возвращают
+`status=UP`. HTTP доменов перенаправляется на HTTPS, IP `45.132.176.28` остаётся
+доступен по HTTP. Прямые Prometheus actuator URL закрыты `404`.
+
+На сервере active `TLS_MODE=public`; renewal helper запущен. Приложения сохранили
+image SHA: Analytics `3d323b770e5e110d6cbda3cf11ebba0185c41b85`, Generator
+`a25cc299eaf997510d15b572f7be18ba31884ff5`, Web
+`8146b0df1b385a45d69b8f31fb8ddd5a43afd63f`.
 
 ### TLS и observability
 

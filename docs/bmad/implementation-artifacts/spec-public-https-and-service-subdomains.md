@@ -69,7 +69,9 @@ context:
 
 Авторитетные NS и live DNS проверены 2026-10-11: все три имени резолвятся в `45.132.176.28`; HTTP path-based health возвращает `200/UP`. Для HTTP-01 порт 80 уже публичен. Контакт Certbot берётся из deployment variable, не коммитится.
 
-Локальная реализация завершена: Nginx поддерживает exact-host HTTPS и совместимые path routes, Certbot — HTTP-01 exact SAN и прежний DNS-01 wildcard, delivery — целевое обновление трёх TLS-полей и безопасный initial HTTP listener. Полная проверка выполнена через `uv run --no-cache --with 'PyYAML==6.0.3' --with 'openapi-spec-validator==0.7.2' ./scripts/validate.sh`; все edge, Certbot, delivery, OpenAPI, Prometheus и isolated Compose smoke tests прошли. Live Dev task остаётся до review, commit и push согласно workflow.
+Локальная реализация завершена: Nginx поддерживает exact-host HTTPS и совместимые path routes, Certbot — HTTP-01 exact SAN и прежний DNS-01 wildcard, delivery — целевое обновление TLS-полей и безопасный initial HTTP listener. Во время live rollout обнаружено, что BuildKit мог забрать оставшуюся часть remote Bash heredoc из stdin после `docker compose build`; сборка завершалась успешно, но команды reconcile не выполнялись. Build и listener probe теперь отсоединены от heredoc stdin; delivery test моделирует это поведение.
+
+Live Dev подтверждён 2026-10-12: CI run [38164570249, attempt 3](https://github.com/FKIT-BI/fkit-bi-infra/actions/runs/38164570249/attempts/3) завершил verify и exact-SHA delivery успешно для `47db405ad4c6a585e10aaa8f8634ce90168235e4`. Let’s Encrypt SAN: `bi.kitexp.ru`, `api.bi.kitexp.ru`, `generator.bi.kitexp.ru`; срок действия до 2027-01-10. Web и все path/direct Analytics/Generator health endpoints возвращают `200`, actuator — `status=UP`; доменные HTTP URL возвращают `301`, IP HTTP — `200`, прямые Prometheus actuator URL — `404`. На сервере `TLS_MODE=public`, cert-renew запущен, application image SHA сохранены.
 
 ## Spec Change Log
 
@@ -110,5 +112,5 @@ HTTP-01 выбран для текущих точных hostnames, потому 
 **Commands:**
 - `./scripts/validate.sh` — все static/runtime, Nginx, Certbot и delivery tests проходят.
 - `git diff --check` — нет whitespace/errors.
-- GitHub Infra CI — verify и exact-SHA Dev delivery успешны.
-- `curl`/`openssl s_client` — HTTP redirects, SAN/issuer и `200/UP` на Web и двух direct actuator URL подтверждены.
+- GitHub Infra CI run 38164570249 attempt 3 — verify и exact-SHA Dev delivery успешны.
+- `curl`/`openssl s_client` — redirects, Let’s Encrypt issuer, все три SAN, `200/UP` на Web и четырёх path/direct actuator URL, `404` на Prometheus и `200` по IP HTTP подтверждены.

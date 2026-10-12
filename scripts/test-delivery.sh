@@ -211,6 +211,13 @@ if [[ "$*" == *'grafana cli admin reset-admin-password '* ]]; then
   cat >/dev/null
   exit 0
 fi
+if [[ "$*" == 'compose build cert-setup' ]]; then
+  # Model BuildKit consuming stdin. The remote deployment script must detach
+  # this command from the heredoc that carries the remaining remote commands.
+  printf 'docker %s\n' "$*" >> "$FKIT_BI_TEST_DELIVERY_LOG"
+  cat >/dev/null
+  exit 0
+fi
 printf 'docker %s\n' "$*" >> "$FKIT_BI_TEST_DELIVERY_LOG"
 if [[ "$*" == 'compose exec -T proxy wget -qO- --header=Host: bi.kitexp.ru http://127.0.0.1/.well-known/acme-challenge/fkit-bi-listener-probe' ]]; then
   if [[ "${FKIT_BI_TEST_ACME_LISTENER_PRESENT:-0}" == 1 ]]; then
