@@ -95,8 +95,8 @@ FKIT_BI_DEV_PUBLIC_URL=http://host:port ./scripts/bootstrap-dev.sh
 
 ### Текущее состояние (2026-10-12)
 
-Infra SHA `47db405ad4c6a585e10aaa8f8634ce90168235e4` успешно прошёл verify и Dev
-delivery в [CI run 38164570249, attempt 3](https://github.com/FKIT-BI/fkit-bi-infra/actions/runs/38164570249/attempts/3).
+Infra SHA `913ab9f06d10e3471f95f1fb2674519cb40f2aa3` успешно прошёл verify и Dev
+delivery в [CI run 38198454137](https://github.com/FKIT-BI/fkit-bi-infra/actions/runs/38198454137).
 Сертификат Let’s Encrypt выдан для `bi.kitexp.ru`, `api.bi.kitexp.ru` и
 `generator.bi.kitexp.ru`, действителен до 2027-01-10. Web и все четыре
 path-based/direct actuator health URL отвечают `200`; API возвращают
