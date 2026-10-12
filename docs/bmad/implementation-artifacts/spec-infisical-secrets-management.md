@@ -72,19 +72,18 @@ context:
 DEV workflows подготовлены для общей Machine Identity `github-infra-dev`
 (`6214b351-e1af-4180-9e74-e20e1073a97b`) через Actions variable
 `FKIT_BI_INFISICAL_IDENTITY_ID`; variable установлена в GitHub с visibility
-`selected` для ровно четырёх репозиториев. Первый live-run Analytics завершил
-verify и публикацию, но OIDC был отклонён с `claim not allowed`; точное поле
-claims нужно сверить в Infisical. Audience явно задан как
-`https://github.com/FKIT-BI`; issuer —
-`https://token.actions.githubusercontent.com`. Требуемая конфигурация Infisical
-должна ограничивать claims этими четырьмя репозиториями и
-`refs/heads/develop`, `event_name=push` и точным `workflow_ref`
-`FKIT-BI/<repo>/.github/workflows/ci.yml@refs/heads/develop` для каждого
-репозитория. Последнее ограничение не позволит другому workflow использовать
-identity, даже если ему позднее выдадут `id-token: write`. Каждому workflow
-выдавать Read grant только на его
-`/github-actions/<repo>` path в `dev`; эти grants и claims требуют подтверждения
-в live workflow/audit log.
+`selected` для четырёх deploy-репозиториев. По явному решению владельца
+Infisical identity claims допускают все репозитории организации на `develop`
+(`repository=FKIT-BI/*`, `ref=refs/heads/develop`); GitHub Actions variable пока
+видна четырём deploy-репозиториям. Workflow явно запрашивают audience
+`https://github.com/FKIT-BI`; пустое поле Audiences в установленном экземпляре
+не препятствует этой OIDC-авторизации. Первый live-run Analytics упал на
+`claim not allowed`: первоначальный filter `ORG/{fkit.bi-*}` не совпадал с
+фактическим owner/repository. После его замены свежая диагностическая попытка
+успешно аутентифицировалась, прочитала Analytics folder и завершила DEV deploy.
+Analytics, Generator и Web уже успешно прошли Infisical read и DEV deploy;
+проверка Infra ещё выполняется. Гранты чтения остаются отдельными: каждому
+workflow — только его `/github-actions/<repo>` path в `dev`.
 
 Локальная доставка проверена `scripts/test-delivery.sh`; прошли также проверки
 runtime contracts, маршрутов Nginx, DNS hook (12 тестов) и hostname SAN
@@ -99,6 +98,7 @@ repository. `AuthFlowTest` не удалось запустить: в среде
 ## Spec Change Log
 
 - 2026-10-12: По уточнению пользователя исключена runtime-ротация. Infisical служит хранилищем/точкой получения; смена пароля целевой системы отдельна от deploy, который только применяет конфигурацию и перезапускает выбранное приложение.
+- 2026-10-12: По явному решению пользователя OIDC Claims разрешают все репозитории организации `FKIT-BI` на `develop`; folder-level Read grants остаются ограничены четырьмя согласованными путями.
 
 ## Review Triage Log
 

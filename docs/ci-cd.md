@@ -80,29 +80,29 @@ variable `FKIT_BI_INFISICAL_IDENTITY_ID`. До установки этой varia
 environment — `dev`.
 
 Настройте identity с issuer и discovery URL
-`https://token.actions.githubusercontent.com`, audience
-`https://github.com/FKIT-BI` и claims, разрешающими ровно эти четыре
-`repository` значения и `ref=refs/heads/develop`. Дополнительно ограничьте
-`event_name=push` и точный `workflow_ref` для каждого репозитория:
-`FKIT-BI/<repo>/.github/workflows/ci.yml@refs/heads/develop` (например,
-`FKIT-BI/fkit-bi-infra/.github/workflows/ci.yml@refs/heads/develop`). Так другие
-workflow не смогут использовать identity, даже если им позднее выдадут
-`id-token: write`. Выдайте только Read grant для папок
+`https://token.actions.githubusercontent.com`. По явному решению владельца,
+claims разрешают любой репозиторий организации на `develop`:
+`repository=FKIT-BI/*` и `ref=refs/heads/develop`. Workflow запрашивают audience
+`https://github.com/FKIT-BI`; в текущей конфигурации Infisical пустое поле
+Audiences не помешало успешной авторизации. Этот org-wide claim не означает
+доступ ко всем секретам: выдавайте только Read grant для папок
 `/github-actions/infra`, `/github-actions/analytics`,
 `/github-actions/generator` и `/github-actions/web` соответственно; не выдавайте
-доступ к другим путям. В workflow `id-token: write` задан только на deploy job,
-который запускается при `push` в `develop`. Проверьте OIDC audit log и отсутствие
-identity у `pull_request`, feature refs и `workflow_dispatch`. Секреты не должны
-появляться в логах или artifacts. Старые Actions secrets не удаляйте в рамках
-этой интеграции.
+доступ к другим путям. На данный момент org variable с Identity ID имеет
+visibility `selected` только для этих четырёх репозиториев. В workflow
+`id-token: write` задан только на deploy job, который запускается при `push` в
+`develop`. Другие workflow организации на `develop` также смогут
+аутентифицироваться, если получат Identity ID и `id-token: write`; это входит в
+согласованную широкую OIDC-политику. Секреты не должны появляться в логах или
+artifacts. Старые Actions secrets не удаляйте в рамках этой интеграции.
 
-Первый DEV-run Analytics после добавления variable (`38222779544`) завершил
-verify и публикацию образа, но шаг Infisical вернул `401 Access denied: OIDC
-claim not allowed`. Если в настройке `repository` указаны значения из старого
-описания с точкой (`FKIT-BI/fkit.bi-*`), замените их на фактические имена с
-дефисом из списка выше. После исправления повторите deploy и убедитесь, что
-OIDC audit log подтверждает ожидаемые `repository`, `ref`, `event_name` и
-`workflow_ref`.
+Первый запуск Analytics (`38222779544`, attempt 1) завершился
+`401 Access denied: OIDC claim not allowed`. Первоначально указанный фильтр
+`repository=ORG/{fkit.bi-*}` не совпадал с фактическим GitHub claim
+`FKIT-BI/fkit-bi-analytics` (owner placeholder и точки вместо дефисов). После
+установки одобренного `FKIT-BI/*` свежий OIDC diagnostic на push в `develop`
+показал фактические `repository`, `ref`, `aud`, `event_name` и `workflow_ref`;
+Infisical принял identity, прочитал папку Analytics, DEV deploy прошёл.
 
 ## Проверка результата
 
