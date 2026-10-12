@@ -69,6 +69,20 @@ context:
 
 ## Implementation Notes
 
+DEV workflows подготовлены для общей Machine Identity `github-infra-dev`
+(`6214b351-e1af-4180-9e74-e20e1073a97b`) через Actions variable
+`FKIT_BI_INFISICAL_IDENTITY_ID`; на момент записи variable в GitHub ещё не
+установлена. Audience явно задан как `https://github.com/FKIT-BI`; issuer —
+`https://token.actions.githubusercontent.com`. Требуемая конфигурация Infisical
+должна ограничивать claims этими четырьмя репозиториями и
+`refs/heads/develop`, `event_name=push` и точным `workflow_ref`
+`FKIT-BI/<repo>/.github/workflows/ci.yml@refs/heads/develop` для каждого
+репозитория. Последнее ограничение не позволит другому workflow использовать
+identity, даже если ему позднее выдадут `id-token: write`. Каждому workflow
+выдавать Read grant только на его
+`/github-actions/<repo>` path в `dev`; эти grants и claims требуют подтверждения
+в live workflow/audit log.
+
 Локальная доставка проверена `scripts/test-delivery.sh`; прошли также проверки
 runtime contracts, маршрутов Nginx, DNS hook (12 тестов) и hostname SAN
 самоподписанного сертификата. Полная `scripts/validate.sh` дошла до сборки

@@ -2,6 +2,7 @@
 """Fast static integration checks for Compose, proxy, and provisioning contracts."""
 
 import json
+import os
 import subprocess
 from pathlib import Path
 import yaml
@@ -80,38 +81,70 @@ for text in (nginx, tls):
 infra_workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
 assert "id-token" not in infra_workflow.get("permissions", {})
 assert "id-token" not in infra_workflow["jobs"]["verify"].get("permissions", {})
-assert infra_workflow["jobs"]["deliver-dev"]["permissions"]["id-token"] == "write"
-assert any("Infisical/secrets-action@" in step.get("uses", "")
-           and step.get("with", {}).get("secret-path") == "/github-actions/infra"
-           for step in infra_workflow["jobs"]["deliver-dev"]["steps"])
-assert any("Infisical/secrets-action@8a06c1bdcd5b8635d510c52d4b57a92c1ccef785" in step.get("uses", "")
-           for step in infra_workflow["jobs"]["deliver-dev"]["steps"])
-assert all("secrets.FKIT_BI_DEV_SSH_PRIVATE_KEY" not in step.get("env", {}).values()
-           for step in infra_workflow["jobs"]["deliver-dev"]["steps"])
-for repository in ("web", "analytics", "generator"):
+
+workflow_roots = {"infra": ROOT}
+workflow_root_overrides = json.loads(os.environ.get("FKIT_BI_WORKFLOW_ROOTS", "{}"))
+workflow_roots.update({name: Path(path) for name, path in workflow_root_overrides.items()})
+in_github_actions = os.environ.get("GITHUB_ACTIONS") == "true"
+if workflow_root_overrides:
+    required_repositories = {"infra", "analytics", "generator", "web"}
+elif in_github_actions:
+    required_repositories = {"infra", "analytics", "generator"}
+else:
+    required_repositories = {"infra", "analytics", "generator", "web"}
+
+for repository in ("analytics", "generator", "web"):
+    if in_github_actions and not workflow_root_overrides and repository == "web":
+        continue  # Infra CI intentionally checks out analytics and generator, but not web.
+    if repository in workflow_roots:
+        continue
     repository_root = ROOT.parent / f"fkit-bi-{repository}"
     if not repository_root.exists():
         repository_root = ROOT / ".ci" / f"fkit-bi-{repository}"
     if not repository_root.exists():
-        if repository == "web":
-            continue  # The infra CI checkout deliberately keeps its token scope to two backend repos.
-        raise AssertionError(f"missing CI checkout for {repository}")
+        if repository in required_repositories:
+            raise AssertionError(f"missing required workflow checkout for {repository}")
+        continue
+    workflow_roots[repository] = repository_root
+
+missing_repositories = required_repositories.difference(workflow_roots)
+assert not missing_repositories, f"missing required workflow checkouts: {sorted(missing_repositories)}"
+
+for repository, repository_root in workflow_roots.items():
     workflow = yaml.safe_load((repository_root / ".github/workflows/ci.yml").read_text())
     jobs = workflow["jobs"]
-    assert "id-token" not in workflow.get("permissions", {})
-    assert "id-token" not in jobs["verify"].get("permissions", {})
-    assert jobs["deploy-dev"]["permissions"]["id-token"] == "write"
-    assert "github.event_name == 'push'" in jobs["deploy-dev"]["if"]
-    assert "refs/heads/develop" in jobs["deploy-dev"]["if"]
-    assert any("Infisical/secrets-action@" in step.get("uses", "")
-               and step.get("with", {}).get("secret-path") == f"/github-actions/{repository}"
-               for step in jobs["deploy-dev"]["steps"])
-    assert any("Infisical/secrets-action@8a06c1bdcd5b8635d510c52d4b57a92c1ccef785" in step.get("uses", "")
-               for step in jobs["deploy-dev"]["steps"])
-    assert "GH_TOKEN" not in jobs["deploy-dev"].get("env", {})
-    clone_step = next(step for step in jobs["deploy-dev"]["steps"]
-                      if "gh repo clone FKIT-BI/fkit-bi-infra" in step.get("run", ""))
-    assert clone_step.get("env", {}).get("GH_TOKEN") == "${{ secrets.FKIT_BI_GITHUB_TOKEN }}"
+    deploy_job_name = "deliver-dev" if repository == "infra" else "deploy-dev"
+    deploy_job = jobs[deploy_job_name]
+    expected_path = f"/github-actions/{repository}"
+    assert "id-token" not in workflow.get("permissions", {}), repository
+    for job_name, job in jobs.items():
+        if job_name != deploy_job_name:
+            assert "id-token" not in job.get("permissions", {}), f"{repository}/{job_name}"
+    assert deploy_job["permissions"]["id-token"] == "write", repository
+    expected_gate = "github.event_name == 'push' && github.ref == 'refs/heads/develop'"
+    if repository != "infra":
+        expected_gate += " && vars.FKIT_BI_DEV_DEPLOY_ENABLED == 'true'"
+    assert deploy_job.get("if") == expected_gate, repository
+    infisical_steps = [step for step in deploy_job["steps"]
+                       if step.get("uses", "").startswith("Infisical/secrets-action@")]
+    assert len(infisical_steps) == 1, repository
+    action = infisical_steps[0]
+    inputs = action.get("with", {})
+    assert action["uses"] == "Infisical/secrets-action@8a06c1bdcd5b8635d510c52d4b57a92c1ccef785", repository
+    assert inputs["method"] == "oidc", repository
+    assert inputs["identity-id"] == "${{ vars.FKIT_BI_INFISICAL_IDENTITY_ID }}", repository
+    assert inputs["oidc-audience"] == "https://github.com/FKIT-BI", repository
+    assert inputs["domain"] == "https://secrets.kitexp.ru", repository
+    assert inputs["project-slug"] == "${{ vars.FKIT_BI_INFISICAL_PROJECT_SLUG }}", repository
+    assert inputs["env-slug"] == "dev", repository
+    assert inputs["secret-path"] == expected_path, repository
+    assert not any("secrets.FKIT_BI_DEV_SSH_PRIVATE_KEY" in json.dumps(step, sort_keys=True)
+                   for step in deploy_job["steps"]), repository
+    if repository != "infra":
+        assert "GH_TOKEN" not in deploy_job.get("env", {}), repository
+        clone_step = next(step for step in deploy_job["steps"]
+                          if "gh repo clone FKIT-BI/fkit-bi-infra" in step.get("run", ""))
+        assert clone_step.get("env", {}).get("GH_TOKEN") == "${{ secrets.FKIT_BI_GITHUB_TOKEN }}", repository
 
 prometheus = (ROOT / "observability/prometheus/prometheus.yml").read_text()
 assert "scrape_interval: 15s" in prometheus
@@ -123,4 +156,4 @@ assert len(dashboards) == 6, f"expected six provisioned dashboards, found {len(d
 for dashboard in dashboards:
     json.loads(dashboard.read_text())
 
-print("Runtime contract checks passed: private targets, independent business services, routes, trace/auth forwarding, and six dashboards.")
+print(f"Runtime contract checks passed for {', '.join(workflow_roots)}: private targets, isolated OIDC, paths, routes, and six dashboards.")

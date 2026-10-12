@@ -68,20 +68,40 @@ FKIT_BI_DEV_DEPLOY_ENABLED=true
 встроенный `GITHUB_TOKEN` остаётся для GHCR. Не помещайте secret values в Actions
 Variables, репозиторий, `.env.example` или логи.
 
-OIDC identity создайте отдельно для каждого репозитория и разрешайте только из
-deploy job на push в `develop`. Ограничьте issuer и discovery URL значением
-`https://token.actions.githubusercontent.com`, subject — конкретным repo/ref,
-audience — URL владельца и claims — `event_name=push` плюс точный `workflow_ref`.
-Предоставьте роли только чтение `/github-actions/<repo>` в соответствующем
-Infisical project; infra workflow использует `/github-actions/infra`. Проверьте
-OIDC audit log и отсутствие identity у `pull_request`, fork и
-`workflow_dispatch`. Старые Actions secrets удаляйте только после успешного
-cutover и ручной проверки rollback.
+Четыре DEV deploy workflow подготовлены для общей Machine Identity
+`github-infra-dev` (`6214b351-e1af-4180-9e74-e20e1073a97b`) через Actions
+variable `FKIT_BI_INFISICAL_IDENTITY_ID`. До установки этой variable в GitHub
+получение secrets не заработает. Создайте её в организации с доступом ровно к
+`fkit-bi-infra`, `fkit-bi-analytics`, `fkit-bi-generator` и `fkit-bi-web`.
+Существующая `FKIT_BI_INFISICAL_PROJECT_SLUG=fkit-bi-ti-mx` остаётся без
+изменений. Во всех четырёх шагах Infisical явно указан audience
+`https://github.com/FKIT-BI`; Infisical domain — `https://secrets.kitexp.ru`,
+environment — `dev`.
+
+Настройте identity с issuer и discovery URL
+`https://token.actions.githubusercontent.com`, audience
+`https://github.com/FKIT-BI` и claims, разрешающими ровно эти четыре
+`repository` значения и `ref=refs/heads/develop`. Дополнительно ограничьте
+`event_name=push` и точный `workflow_ref` для каждого репозитория:
+`FKIT-BI/<repo>/.github/workflows/ci.yml@refs/heads/develop` (например,
+`FKIT-BI/fkit-bi-infra/.github/workflows/ci.yml@refs/heads/develop`). Так другие
+workflow не смогут использовать identity, даже если им позднее выдадут
+`id-token: write`. Выдайте только Read grant для папок
+`/github-actions/infra`, `/github-actions/analytics`,
+`/github-actions/generator` и `/github-actions/web` соответственно; не выдавайте
+доступ к другим путям. В workflow `id-token: write` задан только на deploy job,
+который запускается при `push` в `develop`. Проверьте OIDC audit log и отсутствие
+identity у `pull_request`, feature refs и `workflow_dispatch`. Секреты не должны
+появляться в логах или artifacts. Старые Actions secrets не удаляйте в рамках
+этой интеграции.
 
 ## Проверка результата
 
 - В GitHub Actions откройте run соответствующего репозитория, убедитесь, что
   `verify` успешен и доставка не помечена как disabled.
+- `python3 scripts/test-runtime-contracts.py` проверяет точные OIDC inputs,
+  identity variable, audience, project, environment, secret path и job-level
+  `id-token` ограничения для доступных checkout workflow.
 - Dev: <http://45.132.176.28/> (Nginx на порту 80; backend-порты не открыты наружу).
 - Health analytics: `/api/analytics/actuator/health`.
 - Health generator: `/api/generator/actuator/health`.
