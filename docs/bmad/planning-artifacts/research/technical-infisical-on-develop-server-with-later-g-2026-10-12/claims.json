@@ -1,0 +1,5 @@
+[
+  {"claim":"Infisical Secrets Action supports self-hosted domain plus OIDC and environment/file export","class":"version/compatibility","pub_date":"2026-10-12"},
+  {"claim":"GitHub-hosted runner can retrieve runtime values from self-hosted Infisical through public HTTPS using a restricted OIDC identity","class":"architecture","pub_date":"2026-10-12"},
+  {"claim":"Infisical current source defaults product telemetry and announcements to enabled","class":"version/compatibility","pub_date":"2026-10-12"}
+]

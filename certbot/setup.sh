@@ -33,14 +33,15 @@ case "$mode" in
     mkdir -p "$cert_dir"
     if ! valid_certificate_pair "$cert_dir" || ! certificate_key_match "$cert_dir" \
       || ! openssl x509 -in "$cert_dir/fullchain.pem" -checkhost bi.kitexp.ru -noout >/dev/null 2>&1 \
-      || ! openssl x509 -in "$cert_dir/fullchain.pem" -checkhost node.bi.kitexp.ru -noout >/dev/null 2>&1; then
+      || ! openssl x509 -in "$cert_dir/fullchain.pem" -checkhost node.bi.kitexp.ru -noout >/dev/null 2>&1 \
+      || ! openssl x509 -in "$cert_dir/fullchain.pem" -checkhost secrets.kitexp.ru -noout >/dev/null 2>&1; then
       cert_tmp="$cert_dir/fullchain.pem.tmp"
       key_tmp="$cert_dir/privkey.pem.tmp"
       openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
         -keyout "$key_tmp" \
         -out "$cert_tmp" \
         -subj '/CN=bi.kitexp.ru' \
-        -addext 'subjectAltName=DNS:bi.kitexp.ru,DNS:*.bi.kitexp.ru'
+        -addext 'subjectAltName=DNS:bi.kitexp.ru,DNS:*.bi.kitexp.ru,DNS:secrets.kitexp.ru'
       chmod 600 "$key_tmp"
       mv "$key_tmp" "$cert_dir/privkey.pem"
       mv "$cert_tmp" "$cert_dir/fullchain.pem"
@@ -68,7 +69,7 @@ case "$mode" in
         certbot certonly --non-interactive --agree-tos --email "$CERTBOT_EMAIL" \
           --webroot --webroot-path "$webroot" --preferred-challenges http \
           --cert-name bi.kitexp.ru \
-          -d bi.kitexp.ru -d api.bi.kitexp.ru -d generator.bi.kitexp.ru
+          -d bi.kitexp.ru -d api.bi.kitexp.ru -d generator.bi.kitexp.ru -d secrets.kitexp.ru
         ;;
       dns-01)
         : "${DNS_ZONE_ID:?DNS_ZONE_ID is required for public DNS-01}"
@@ -84,7 +85,7 @@ case "$mode" in
           --manual --preferred-challenges dns \
           --manual-auth-hook 'python3 /opt/fkit/certbot/yandex_dns.py auth' \
           --manual-cleanup-hook 'python3 /opt/fkit/certbot/yandex_dns.py cleanup' \
-          --cert-name bi.kitexp.ru -d bi.kitexp.ru -d '*.bi.kitexp.ru'
+          --cert-name bi.kitexp.ru -d bi.kitexp.ru -d '*.bi.kitexp.ru' -d secrets.kitexp.ru
         ;;
       *)
         echo "Unsupported CERTBOT_CHALLENGE: $challenge" >&2

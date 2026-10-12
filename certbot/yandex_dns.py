@@ -134,7 +134,12 @@ def update_record_sets(token: str, zone_id: str, additions: list[dict], deletion
 def modify_challenge(remove: bool) -> None:
     token_value = os.environ["CERTBOT_VALIDATION"]
     zone_id = os.environ["DNS_ZONE_ID"]
-    record_name = os.environ.get("DNS_RECORD_NAME", "_acme-challenge.bi.kitexp.ru.")
+    challenge_domain = os.environ.get("CERTBOT_DOMAIN")
+    if challenge_domain:
+        challenge_domain = challenge_domain.removeprefix("*.").rstrip(".").lower()
+        record_name = f"_acme-challenge.{challenge_domain}."
+    else:
+        record_name = os.environ.get("DNS_RECORD_NAME", "_acme-challenge.bi.kitexp.ru.")
     # DNS APIs represent TXT RDATA with the surrounding presentation-format quotes.
     txt_value = f'"{token_value}"'
     token = access_token()

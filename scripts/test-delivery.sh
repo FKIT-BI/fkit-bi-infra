@@ -55,6 +55,8 @@ expect_failure 'Dev deploy path must be an absolute safe path.' env \
   FKIT_BI_DEV_SSH_KNOWN_HOSTS='dev.example.test ssh-ed25519 AAAA' \
   FKIT_BI_DEV_SSH_PRIVATE_KEY='test private key' \
   FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+  FKIT_BI_DEV_POSTGRES_PASSWORD='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' \
+  FKIT_BI_DEV_JWT_SECRET='MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' \
   ./scripts/deploy-infra.sh f5f0e7b6519a01233ab503f88e078cd7e239bc00
 
 # Non-public delivery does not require Certbot-specific settings.
@@ -69,6 +71,8 @@ expect_failure 'scp reached after non-public preflight' env \
   FKIT_BI_DEV_SSH_KNOWN_HOSTS='dev.example.test ssh-ed25519 AAAA' \
   FKIT_BI_DEV_SSH_PRIVATE_KEY='test private key' \
   FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+  FKIT_BI_DEV_POSTGRES_PASSWORD='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' \
+  FKIT_BI_DEV_JWT_SECRET='MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' \
   ./scripts/deploy-infra.sh f5f0e7b6519a01233ab503f88e078cd7e239bc00
 
 # Внешний контракт healthcheck включает public URL и оба API.
@@ -102,9 +106,10 @@ grep -Fx 'https://bi.kitexp.ru/api/analytics/actuator/health' "$health_log" >/de
 grep -Fx 'https://bi.kitexp.ru/api/generator/actuator/health' "$health_log" >/dev/null
 grep -Fx 'https://api.bi.kitexp.ru/actuator/health' "$health_log" >/dev/null
 grep -Fx 'https://generator.bi.kitexp.ru/actuator/health' "$health_log" >/dev/null
-expect_failure 'usage: healthcheck.sh' env \
-  FKIT_BI_TEST_HEALTH_LOG="$health_log" PATH="$temporary_dir/bin:$PATH" \
-  ./scripts/healthcheck.sh https://bi.kitexp.ru https://api.bi.kitexp.ru/actuator/health
+: > "$health_log"
+FKIT_BI_TEST_HEALTH_LOG="$health_log" PATH="$temporary_dir/bin:$PATH" \
+  ./scripts/healthcheck.sh https://bi.kitexp.ru https://secrets.kitexp.ru/
+grep -Fx 'https://secrets.kitexp.ru/' "$health_log" >/dev/null
 
 # Service delivery chooses the health endpoint for the selected runtime.
 cat > "$temporary_dir/bin/flock" <<'EOF'
@@ -194,21 +199,22 @@ printf '%s\n' \
   'GENERATOR_IMAGE=generator-kept' \
   'WEB_IMAGE=web-kept' \
   'GIT_SHA=application-sha-kept' \
+  'POSTGRES_USER=fkit_bi' \
+  'POSTGRES_DB=fkit_bi' \
+  'INFISICAL_POSTGRES_DB=infisical' \
+  'INFISICAL_POSTGRES_USER=infisical' \
+  'INFISICAL_POSTGRES_PASSWORD=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' \
+  'INFISICAL_ENCRYPTION_KEY=dddddddddddddddddddddddddddddddd' \
+  'INFISICAL_AUTH_SECRET=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' \
   'GRAFANA_ADMIN_PASSWORD=replace-with-a-grafana-secret' > "$server_dir/.env"
 delivery_log="$temporary_dir/delivery.log"
+delivery_health_log="$temporary_dir/delivery-health.log"
 
 cat > "$temporary_dir/bin/docker" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "$*" == 'compose config --environment' ]]; then
   grep -E '^GRAFANA_ADMIN_PASSWORD=' .env || true
-  exit 0
-fi
-if [[ "$*" == *'grafana cli admin reset-admin-password '* ]]; then
-  printf 'docker compose exec -T grafana grafana cli admin reset-admin-password [REDACTED]\n' \
-    >> "$FKIT_BI_TEST_DELIVERY_LOG"
-  # Model Compose exec consuming the remote script's stdin if it is left open.
-  cat >/dev/null
   exit 0
 fi
 if [[ "$*" == 'compose build cert-setup' ]]; then
@@ -272,6 +278,7 @@ for ((index = 1; index <= $#; index++)); do
     output="${!output_index}"
   fi
 done
+printf '%s\n' "${!#}" >> "${FKIT_BI_TEST_DELIVERY_HEALTH_LOG:-/dev/null}"
 [[ -z "$output" ]] || printf '{"status":"UP"}\n' > "$output"
 EOF
 chmod +x "$temporary_dir/bin/scp" "$temporary_dir/bin/docker" \
@@ -281,6 +288,7 @@ env \
   PATH="$temporary_dir/bin:$PATH" \
   FKIT_BI_TEST_SERVER_DIR="$server_dir" \
   FKIT_BI_TEST_DELIVERY_LOG="$delivery_log" \
+  FKIT_BI_TEST_DELIVERY_HEALTH_LOG="$delivery_health_log" \
   FKIT_BI_DEV_HOST=dev.example.test \
   FKIT_BI_DEV_SSH_USER=deployer \
   FKIT_BI_DEV_SSH_PORT=22 \
@@ -292,6 +300,8 @@ env \
   FKIT_BI_DEV_SSH_KNOWN_HOSTS='dev.example.test ssh-ed25519 AAAA' \
   FKIT_BI_DEV_SSH_PRIVATE_KEY='test private key' \
   FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+  FKIT_BI_DEV_POSTGRES_PASSWORD='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' \
+  FKIT_BI_DEV_JWT_SECRET='MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' \
   ./scripts/deploy-infra.sh "$test_sha" >/dev/null
 
 [[ "$(grep -F 'PRIVATE_VALUE=unchanged' "$server_dir/.env")" == 'PRIVATE_VALUE=unchanged' ]]
@@ -299,11 +309,12 @@ grep -Fx 'ANALYTICS_IMAGE=analytics-kept' "$server_dir/.env" >/dev/null
 grep -Fx 'GENERATOR_IMAGE=generator-kept' "$server_dir/.env" >/dev/null
 grep -Fx 'WEB_IMAGE=web-kept' "$server_dir/.env" >/dev/null
 grep -Fx 'GIT_SHA=application-sha-kept' "$server_dir/.env" >/dev/null
+grep -Fx 'POSTGRES_PASSWORD=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' "$server_dir/.env" >/dev/null
+grep -Fx 'FKIT_JWT_SECRET=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' "$server_dir/.env" >/dev/null
 grep -Fx 'GRAFANA_ADMIN_PASSWORD=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$server_dir/.env" >/dev/null
 grep -Fx 'TLS_MODE=public' "$server_dir/.env" >/dev/null
 grep -Fx 'CERTBOT_CHALLENGE=http-01' "$server_dir/.env" >/dev/null
 grep -Fx 'CERTBOT_EMAIL=operator@example.test' "$server_dir/.env" >/dev/null
-[[ ! -e "$server_dir/.fkit-bi-grafana-bootstrap-pending" ]]
 [[ "$(git -C "$server_dir" rev-parse HEAD)" == "$test_sha" ]]
 grep -Fx "$test_sha" "$server_dir/.fkit-bi-infra-sha" >/dev/null
 grep -F 'docker run --rm' "$delivery_log" >/dev/null
@@ -311,20 +322,37 @@ grep -F -- '--add-host analytics:127.0.0.1 --add-host generator:127.0.0.1 --add-
 grep -F 'nginx:1.27-alpine nginx -t' "$delivery_log" >/dev/null
 grep -F 'docker compose pull proxy' "$delivery_log" >/dev/null
 grep -F 'docker compose up -d --no-build --pull never --no-recreate web' "$delivery_log" >/dev/null
+grep -F 'docker compose up -d --no-build --pull never analytics generator' "$delivery_log" >/dev/null
+if grep -Fx 'docker compose up -d --no-build --pull never postgres' "$delivery_log" >/dev/null; then
+  echo 'Infra delivery must not restart BI PostgreSQL.' >&2
+  exit 1
+fi
 grep -F 'docker compose build cert-setup' "$delivery_log" >/dev/null
 [[ "$(grep -Fc 'docker compose run --rm -T --no-deps --entrypoint /bin/sh cert-setup' "$delivery_log")" == 2 ]]
 grep -F 'docker compose run --rm -T cert-setup' "$delivery_log" >/dev/null
-grep -F 'docker compose exec -T grafana grafana cli admin reset-admin-password' "$delivery_log" >/dev/null
-if grep -F 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$delivery_log" >/dev/null; then
-  echo 'Grafana admin password leaked into the delivery log.' >&2
+if grep -E 'docker compose exec -T (postgres psql|grafana grafana cli admin reset-admin-password)' "$delivery_log" >/dev/null; then
+  echo 'Delivery must apply runtime configuration without changing target passwords.' >&2
   exit 1
 fi
+for test_secret in \
+  bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+  MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=; do
+  if grep -F "$test_secret" "$delivery_log" >/dev/null; then
+  echo 'A runtime credential leaked into the delivery log.' >&2
+    exit 1
+  fi
+done
 grep -F 'docker compose up -d --no-build --pull never --no-deps --force-recreate proxy' "$delivery_log" >/dev/null
+[[ "$(grep -nF 'docker compose up -d --no-build --pull never infisical-postgres infisical-redis infisical' "$delivery_log" | cut -d: -f1)" -lt \
+   "$(grep -nF 'docker compose up -d --no-build --pull never --no-deps --force-recreate proxy' "$delivery_log" | tail -n1 | cut -d: -f1)" ]]
 [[ "$(grep -Fc 'docker compose up -d --no-build --pull never --no-deps --force-recreate proxy' "$delivery_log")" == 2 ]]
 grep -Fx 'proxy TLS_MODE=off' "$delivery_log" >/dev/null
 grep -Fx 'proxy TLS_MODE=public' "$delivery_log" >/dev/null
 grep -F 'docker compose pull prometheus grafana postgres-exporter node-exporter' "$delivery_log" >/dev/null
 grep -F 'docker compose up -d --no-build --pull never prometheus grafana postgres-exporter node-exporter' "$delivery_log" >/dev/null
+grep -F 'docker compose up -d --no-build --pull never infisical-postgres infisical-redis infisical' "$delivery_log" >/dev/null
+grep -Fx 'https://secrets.kitexp.ru/' "$delivery_health_log" >/dev/null
+grep -F 'docker compose pull infisical-postgres infisical-redis infisical' "$delivery_log" >/dev/null
 grep -F 'docker compose up -d --no-build --pull never --no-deps cert-renew' "$delivery_log" >/dev/null
 if grep -E 'docker compose pull (postgres|analytics|generator|web)( |$)' "$delivery_log" >/dev/null; then
   echo 'Infra delivery must not pull database or service images.' >&2
@@ -342,6 +370,14 @@ printf '%s\n' \
   'GENERATOR_IMAGE=generator-kept' \
   'WEB_IMAGE=web-kept' \
   'GIT_SHA=application-sha-kept' \
+  'POSTGRES_USER=fkit_bi' \
+  'POSTGRES_DB=fkit_bi' \
+  'POSTGRES_PASSWORD=old-postgres-password' \
+  'INFISICAL_POSTGRES_DB=infisical' \
+  'INFISICAL_POSTGRES_USER=infisical' \
+  'INFISICAL_POSTGRES_PASSWORD=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' \
+  'INFISICAL_ENCRYPTION_KEY=dddddddddddddddddddddddddddddddd' \
+  'INFISICAL_AUTH_SECRET=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' \
   'GRAFANA_ADMIN_PASSWORD=already-configured' > "$failed_server_dir/.env"
 expect_failure 'simulated Certbot failure' env \
   PATH="$temporary_dir/bin:$PATH" \
@@ -358,12 +394,47 @@ expect_failure 'simulated Certbot failure' env \
   FKIT_BI_DEV_SSH_KNOWN_HOSTS='dev.example.test ssh-ed25519 AAAA' \
   FKIT_BI_DEV_SSH_PRIVATE_KEY='test private key' \
   FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+  FKIT_BI_DEV_POSTGRES_PASSWORD='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' \
+  FKIT_BI_DEV_JWT_SECRET='MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' \
   ./scripts/deploy-infra.sh "$test_sha"
 grep -F 'docker compose up -d --no-build --pull never --no-deps --force-recreate proxy' \
   "$failed_delivery_log" >/dev/null
 [[ ! -e "$failed_server_dir/.fkit-bi-infra-sha" ]]
 grep -Fx 'PRIVATE_VALUE=unchanged' "$failed_server_dir/.env" >/dev/null
 grep -Fx 'GIT_SHA=application-sha-kept' "$failed_server_dir/.env" >/dev/null
+grep -Fx 'POSTGRES_PASSWORD=old-postgres-password' "$failed_server_dir/.env" >/dev/null
+
+# Invalid Infisical DB URL characters and undersized key material are rejected
+# by remote preflight before any runtime service is changed.
+for invalid_setting in INFISICAL_POSTGRES_PASSWORD INFISICAL_ENCRYPTION_KEY INFISICAL_AUTH_SECRET; do
+  invalid_server_dir="$temporary_dir/server-invalid-$invalid_setting"
+  invalid_log="$temporary_dir/delivery-invalid-$invalid_setting.log"
+  mkdir -p "$invalid_server_dir"
+  cp "$failed_server_dir/.env" "$invalid_server_dir/.env"
+  case "$invalid_setting" in
+    INFISICAL_POSTGRES_PASSWORD) invalid_value='short@password' ;;
+    INFISICAL_ENCRYPTION_KEY) invalid_value='abcd' ;;
+    INFISICAL_AUTH_SECRET) invalid_value='too-short' ;;
+  esac
+  sed -i "s/^${invalid_setting}=.*/${invalid_setting}=${invalid_value}/" "$invalid_server_dir/.env"
+  expect_failure 'Private .env needs valid Infisical DB, encryption, and auth secrets' env \
+    PATH="$temporary_dir/bin:$PATH" \
+    FKIT_BI_TEST_DELIVERY_LOG="$invalid_log" \
+    FKIT_BI_DEV_HOST=dev.example.test \
+    FKIT_BI_DEV_SSH_USER=deployer \
+    FKIT_BI_DEV_SSH_PORT=22 \
+    FKIT_BI_DEV_DEPLOY_PATH="$invalid_server_dir" \
+    FKIT_BI_DEV_PUBLIC_URL=https://bi.kitexp.ru \
+    FKIT_BI_DEV_TLS_MODE=public \
+    FKIT_BI_DEV_CERTBOT_CHALLENGE=http-01 \
+    FKIT_BI_DEV_CERTBOT_EMAIL=operator@example.test \
+    FKIT_BI_DEV_SSH_KNOWN_HOSTS='dev.example.test ssh-ed25519 AAAA' \
+    FKIT_BI_DEV_SSH_PRIVATE_KEY='test private key' \
+    FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+    FKIT_BI_DEV_POSTGRES_PASSWORD='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' \
+    FKIT_BI_DEV_JWT_SECRET='MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=' \
+    ./scripts/deploy-infra.sh "$test_sha"
+done
 
 # bootstrap-dev starts the complete default Compose stack.
 grep -A 12 '^  generator:' compose.yaml | grep -F '      analytics: {condition: service_healthy}' >/dev/null

@@ -26,6 +26,22 @@ class YandexDnsHookTest(unittest.TestCase):
 
     @patch("yandex_dns.time.sleep")
     @patch("yandex_dns.update_record_sets")
+    @patch("yandex_dns.challenge_record_sets", return_value=[])
+    @patch("yandex_dns.access_token", return_value="mock-iam-token")
+    def test_auth_uses_certbot_domain_for_each_san(self, token, records, update, sleep):
+        with patch.dict(os.environ, {"CERTBOT_DOMAIN": "secrets.kitexp.ru"}):
+            yandex_dns.modify_challenge(remove=False)
+
+        update.assert_called_once_with("mock-iam-token", "zone-test", [{
+            "name": "_acme-challenge.secrets.kitexp.ru.",
+            "type": "TXT",
+            "ttl": "60",
+            "data": ['"challenge-token"'],
+        }], [])
+        sleep.assert_called_once()
+
+    @patch("yandex_dns.time.sleep")
+    @patch("yandex_dns.update_record_sets")
     @patch("yandex_dns.challenge_record_sets")
     @patch("yandex_dns.access_token", return_value="mock-iam-token")
     def test_auth_adds_own_value_and_preserves_existing_values(self, token, records, update, sleep):

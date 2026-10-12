@@ -13,6 +13,7 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
+    networks: [default]
   analytics:
     image: ${ANALYTICS_IMAGE}
     environment:
@@ -96,6 +97,7 @@ services:
         # Keep the fixed proxy address away from Docker's low dynamic allocations
         # (the web container is started first and otherwise receives .2).
         ipv4_address: ${PROXY_CONTAINER_IP:-172.29.0.250}
+      infisical-edge: {}
     ports:
       - "80:80"
       - "443:443"
@@ -111,6 +113,55 @@ services:
     depends_on:
       cert-setup: {condition: service_completed_successfully}
       web: {condition: service_started}
+    restart: unless-stopped
+  infisical:
+    image: infisical/infisical:v0.165.16
+    environment:
+      NODE_ENV: production
+      SITE_URL: https://secrets.kitexp.ru
+      DB_CONNECTION_URI: postgresql://${INFISICAL_POSTGRES_USER}:${INFISICAL_POSTGRES_PASSWORD}@infisical-postgres:5432/${INFISICAL_POSTGRES_DB}
+      REDIS_URL: redis://infisical-redis:6379
+      ENCRYPTION_KEY: ${INFISICAL_ENCRYPTION_KEY:?INFISICAL_ENCRYPTION_KEY is required}
+      AUTH_SECRET: ${INFISICAL_AUTH_SECRET:?INFISICAL_AUTH_SECRET is required}
+      TELEMETRY_ENABLED: "false"
+      ANNOUNCEMENTS_ENABLED: "false"
+      OTEL_TELEMETRY_COLLECTION_ENABLED: "false"
+    expose: [8080]
+    depends_on:
+      infisical-postgres: {condition: service_healthy}
+      infisical-redis: {condition: service_healthy}
+    networks: [infisical-data, infisical-edge]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/status"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
+    restart: unless-stopped
+  infisical-postgres:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_DB: ${INFISICAL_POSTGRES_DB:?INFISICAL_POSTGRES_DB is required}
+      POSTGRES_USER: ${INFISICAL_POSTGRES_USER:?INFISICAL_POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${INFISICAL_POSTGRES_PASSWORD:?INFISICAL_POSTGRES_PASSWORD is required}
+    volumes: [infisical-postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [infisical-data]
+    restart: unless-stopped
+  infisical-redis:
+    image: redis:7.4.1-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [infisical-redis-data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [infisical-data]
     restart: unless-stopped
   prometheus:
     image: prom/prometheus:v3.5.0
@@ -175,9 +226,14 @@ networks:
     ipam:
       config:
         - subnet: ${COMPOSE_SUBNET:-172.29.0.0/24}
+  infisical-data:
+    internal: true
+  infisical-edge:
 volumes:
   postgres-data:
   certbot-data:
   certbot-challenges:
   prometheus-data:
   grafana-data:
+  infisical-postgres-data:
+  infisical-redis-data:

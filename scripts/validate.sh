@@ -24,7 +24,7 @@ docker compose --project-name "$certbot_contract_project" down --volumes --remov
 # Validate both the always-on HTTP config and the optional TLS listener with
 # disposable files. No Compose stack, DNS credentials, ACME request or deploy.
 docker run --rm \
-  --add-host analytics:127.0.0.1 --add-host generator:127.0.0.1 --add-host web:127.0.0.1 \
+  --add-host analytics:127.0.0.1 --add-host generator:127.0.0.1 --add-host web:127.0.0.1 --add-host infisical:127.0.0.1 \
   -v "$PWD/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro" \
   nginx:1.27-alpine nginx -t
 tls_validation_dir=$(mktemp -d "$PWD/.tls-validate.XXXXXX")
@@ -36,10 +36,10 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
   -keyout "$tls_validation_dir/live/bi.kitexp.ru/privkey.pem" \
   -out "$tls_validation_dir/live/bi.kitexp.ru/fullchain.pem" \
   -subj '/CN=bi.kitexp.ru' \
-  -addext 'subjectAltName=DNS:bi.kitexp.ru,DNS:*.bi.kitexp.ru' \
+  -addext 'subjectAltName=DNS:bi.kitexp.ru,DNS:*.bi.kitexp.ru,DNS:secrets.kitexp.ru' \
   >/dev/null 2>&1
 docker run --rm \
-  --add-host analytics:127.0.0.1 --add-host generator:127.0.0.1 --add-host web:127.0.0.1 \
+  --add-host analytics:127.0.0.1 --add-host generator:127.0.0.1 --add-host web:127.0.0.1 --add-host infisical:127.0.0.1 \
   -v "$PWD/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro" \
   -v "$tls_validation_dir/tls.conf:/etc/nginx/conf.d/tls.conf:ro" \
   -v "$tls_validation_dir:/etc/letsencrypt:ro" \
@@ -57,6 +57,7 @@ docker run --rm --tmpfs /etc/letsencrypt:rw \
     test ! -s /etc/letsencrypt/self-signed/bi.kitexp.ru/fullchain.pem
     TLS_MODE=self-signed sh /opt/fkit/certbot/setup.sh
     before="$(openssl x509 -in /etc/letsencrypt/self-signed/bi.kitexp.ru/fullchain.pem -noout -fingerprint)"
+    openssl x509 -in /etc/letsencrypt/self-signed/bi.kitexp.ru/fullchain.pem -checkhost secrets.kitexp.ru -noout
     TLS_MODE=self-signed sh /opt/fkit/certbot/setup.sh
     after="$(openssl x509 -in /etc/letsencrypt/self-signed/bi.kitexp.ru/fullchain.pem -noout -fingerprint)"
     test "$before" = "$after"
@@ -66,6 +67,7 @@ docker run --rm --tmpfs /etc/letsencrypt:rw \
     cert_hash="$(openssl x509 -in "$cert_dir/fullchain.pem" -pubkey -noout | openssl pkey -pubin -outform der | openssl sha256)"
     key_hash="$(openssl pkey -in "$cert_dir/privkey.pem" -pubout -outform der | openssl sha256)"
     test "$cert_hash" = "$key_hash"
+    openssl x509 -in "$cert_dir/fullchain.pem" -checkhost secrets.kitexp.ru -noout
     if TLS_MODE=public sh /opt/fkit/certbot/setup.sh; then
       echo "Public TLS without external settings must fail." >&2
       exit 1

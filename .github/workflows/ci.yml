@@ -34,6 +34,9 @@ jobs:
     needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     concurrency:
       group: fkit-bi-infra-dev-delivery
       cancel-in-progress: false
@@ -48,12 +51,20 @@ jobs:
       FKIT_BI_DEV_CERTBOT_CHALLENGE: ${{ vars.FKIT_BI_DEV_CERTBOT_CHALLENGE }}
       FKIT_BI_DEV_CERTBOT_EMAIL: ${{ vars.FKIT_BI_DEV_CERTBOT_EMAIL }}
       FKIT_BI_DEV_SSH_KNOWN_HOSTS: ${{ vars.FKIT_BI_DEV_SSH_KNOWN_HOSTS }}
-      FKIT_BI_DEV_SSH_PRIVATE_KEY: ${{ secrets.FKIT_BI_DEV_SSH_PRIVATE_KEY }}
-      FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD: ${{ secrets.FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Load infra deployment credentials from Infisical
+        if: env.FKIT_BI_DEV_DEPLOY_ENABLED == 'true'
+        uses: Infisical/secrets-action@8a06c1bdcd5b8635d510c52d4b57a92c1ccef785 # v1.0.9
+        with:
+          method: oidc
+          identity-id: ${{ vars.FKIT_BI_INFISICAL_IDENTITY_ID }}
+          domain: https://secrets.kitexp.ru
+          project-slug: ${{ vars.FKIT_BI_INFISICAL_PROJECT_SLUG }}
+          env-slug: dev
+          secret-path: /github-actions/infra
       - name: Report disabled delivery
         if: env.FKIT_BI_DEV_DEPLOY_ENABLED != 'true'
         run: echo 'Dev infra delivery is disabled (FKIT_BI_DEV_DEPLOY_ENABLED is not true).' >> "$GITHUB_STEP_SUMMARY"

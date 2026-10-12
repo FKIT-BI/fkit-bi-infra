@@ -59,7 +59,7 @@ def check_mode(mode):
             "-keyout", str(cert_dir / "privkey.pem"),
             "-out", str(cert_dir / "fullchain.pem"),
             "-subj", "/CN=bi.kitexp.ru",
-            "-addext", "subjectAltName=DNS:bi.kitexp.ru,DNS:*.bi.kitexp.ru",
+            "-addext", "subjectAltName=DNS:bi.kitexp.ru,DNS:*.bi.kitexp.ru,DNS:secrets.kitexp.ru",
         ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         http_conf = (ROOT / "nginx/default.conf").read_text()
@@ -85,6 +85,7 @@ server {
   }
 }
 server { listen 18083; return 200 'web'; }
+server { listen 18084; return 200 'infisical'; }
 """
         (conf_dir / "default.conf").write_text(http_conf)
         tls_template = temp / "tls.conf.template"
@@ -92,6 +93,7 @@ server { listen 18083; return 200 'web'; }
         tls_conf = tls_conf.replace("analytics:8080", "127.0.0.1:18081")
         tls_conf = tls_conf.replace("generator:8080", "127.0.0.1:18082")
         tls_conf = tls_conf.replace("web:80", "127.0.0.1:18083")
+        tls_conf = tls_conf.replace("infisical:8080", "127.0.0.1:18084")
         tls_template.write_text(tls_conf)
 
         docker("run", "-d", "--name", container,
@@ -99,6 +101,7 @@ server { listen 18083; return 200 'web'; }
                "--add-host", "bi.kitexp.ru:127.0.0.1",
                "--add-host", "api.bi.kitexp.ru:127.0.0.1",
                "--add-host", "generator.bi.kitexp.ru:127.0.0.1",
+               "--add-host", "secrets.kitexp.ru:127.0.0.1",
                "-v", f"{conf_dir}:/etc/nginx/conf.d",
                "-v", f"{tls_template}:/etc/nginx/tls.conf.template:ro",
                "-v", f"{ROOT / 'nginx/start.sh'}:/opt/fkit/nginx/start.sh:ro",
@@ -146,6 +149,8 @@ server { listen 18083; return 200 'web'; }
                 )
                 web = request(container, "https://127.0.0.1/", "bi.kitexp.ru", tls=True)
                 assert web.returncode == 0 and web.stdout == "web", (web.stdout, web.stderr)
+                infisical = request(container, "https://127.0.0.1/", "secrets.kitexp.ru", tls=True)
+                assert infisical.returncode == 0 and "infisical" in infisical.stdout
 
                 for host in ("api.bi.kitexp.ru", "generator.bi.kitexp.ru"):
                     for path in ("/actuator/prometheus", "/actuator/prometheus/"):

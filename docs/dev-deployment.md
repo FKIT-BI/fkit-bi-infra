@@ -72,11 +72,11 @@ Grafana-пароля в приватном `.env`; значения секрет
 
 Этот снимок устарел после успешной HTTPS-доставки 2026-10-12, зафиксированной ниже.
 
-Infra delivery получает `FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD` из Actions secret.
-Если в `.env` ещё стоит известный placeholder, доставка запишет значение в файл
-с режимом `0600`, сбросит пароль Grafana и удалит временную копию. Пароль не
-попадает в журналы. Последующая ротация выполняется отдельно и не сбрасывается
-каждой infra-доставкой.
+Infra delivery получает `FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD` из Infisical и
+записывает его в приватный `.env` с режимом `0600`. Значение внесите в Infisical
+до первого запуска Grafana. При последующей смене пароля оператор сначала меняет
+его в Grafana UI/CLI, затем обновляет Infisical и запускает delivery. Delivery не
+меняет пароль в Grafana или PostgreSQL автоматически.
 
 Для public Dev delivery задайте GitHub Actions variables
 `FKIT_BI_DEV_TLS_MODE=public`, `FKIT_BI_DEV_CERTBOT_CHALLENGE=http-01` и
@@ -109,6 +109,133 @@ image SHA: Analytics `3d323b770e5e110d6cbda3cf11ebba0185c41b85`, Generator
 `8146b0df1b385a45d69b8f31fb8ddd5a43afd63f`.
 
 ### TLS и observability
+
+### Infisical и ротация секретов
+
+Infisical доступен по `https://secrets.kitexp.ru`. Для его развертывания DNS A-запись
+этого имени должна указывать на Dev VM, а публичный TLS-сертификат должен включать
+точный SAN `secrets.kitexp.ru`. Сертификат остаётся общим Certbot lineage; текущие
+имена BI сохраняются. Вход снаружи проходит через Nginx только по HTTPS. Infisical
+PostgreSQL и Redis не публикуют порты, находятся в отдельной внутренней сети и
+используют собственные постоянные volumes, не связанные с `postgres-data` BI.
+
+Перед изменениями запишите preflight `free -h`, `df -h /` и `docker stats --no-stream`.
+Для этого demo-rollout остановитесь, если доступно меньше 2 GiB RAM или меньше
+10 GiB места на диске, либо BI уже unhealthy. Последний preflight develop-хоста
+показал около 6.4 GiB свободной RAM и 41 GiB свободного диска.
+
+Перед первым запуском создайте ключ шифрования на операторской машине прямо в
+файл вне репозитория; команда не печатает его значение:
+
+```bash
+install -d -m 700 "$HOME/.config/fkit-bi"
+umask 077
+openssl rand -hex 16 > "$HOME/.config/fkit-bi/infisical-encryption-key"
+chmod 600 "$HOME/.config/fkit-bi/infisical-encryption-key"
+openssl rand -base64 32 > "$HOME/.config/fkit-bi/infisical-auth-secret"
+chmod 600 "$HOME/.config/fkit-bi/infisical-auth-secret"
+```
+
+Перенесите ключ в защищённую копию на Dev и в private `/opt/fkit-bi/.env` как
+`INFISICAL_ENCRYPTION_KEY`. Отдельно создайте и внесите `INFISICAL_AUTH_SECRET`,
+`INFISICAL_POSTGRES_PASSWORD`, имя и базу Infisical; для пароля БД используйте
+64 строчных hex-символа, чтобы URL подключения не требовал экранирования. Эти
+значения не должны попадать в GitHub Variables или репозиторий. Установите права
+`.env` в `0600`. В Compose telemetry, announcements и OpenTelemetry collection
+выключены явно.
+
+После создания первого администратора откройте Server Settings и выключите
+публичную регистрацию (Disable Signups), сохраните настройку и проверьте, что
+новую учётную запись нельзя создать без приглашения. Bootstrap credentials
+остаются операторскими и не выдаются GitHub Actions.
+
+Затем включите `TLS_MODE=public`, добавьте `secrets.kitexp.ru` в DNS и примените
+инфраструктуру обычной доставкой. Откройте UI, создайте администратора и отключите
+регистрацию. После настройки OIDC identity из следующего раздела создайте
+безвредный `FKIT_BI_TEST_CANARY` в разрешённом пути `/github-actions/infra` и
+прочитайте его через UI. Затем выполните доверенный infra deploy из `develop`;
+Secrets Action прочитает этот путь вместе с deploy credentials. В Audit Logs
+проверьте успешное чтение с actor machine identity, правильными project/environment,
+путём и временем. Значение секрета не должно появляться в журнале. Проверьте BI `/`
+и оба API health endpoint, а также отсутствие OIDC identity у PR/fork jobs. Не
+переносите реальные учётные данные до успешного canary-проверочного deploy.
+
+Резервируйте Infisical PostgreSQL и ключ шифрования раздельно. Снимок БД можно
+создать в защищённый каталог вне репозитория:
+
+```bash
+install -d -m 700 "$HOME/.local/state/fkit-bi-backups"
+umask 077
+backup_file="$HOME/.local/state/fkit-bi-backups/infisical-$(date -u +%Y%m%dT%H%M%SZ).dump"
+docker compose exec -T infisical-postgres sh -c \
+  'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
+  > "$backup_file"
+ln -sfn "$(basename "$backup_file")" "$HOME/.local/state/fkit-bi-backups/infisical-latest.dump"
+```
+
+До удаления прежних credentials восстановите этот dump в отдельный временный
+Compose project с отдельными volumes, тем же закреплённым образом Infisical и
+копией ключа шифрования. Следующий пример запускайте из `/opt/fkit-bi`; он не
+затрагивает рабочие volumes и не публикует test port на внешний интерфейс:
+
+```bash
+restore_project="infisical-restore-$(date -u +%Y%m%d%H%M%S)"
+restore_override="$(mktemp)"
+chmod 600 "$restore_override"
+printf '%s\n' 'services:' '  infisical:' '    environment:' \
+  '      SITE_URL: http://127.0.0.1:18081' '    ports:' \
+  '      - "127.0.0.1:18081:8080"' > "$restore_override"
+dc=(docker compose --project-name "$restore_project" --env-file .env \
+  -f compose.yaml -f "$restore_override")
+"${dc[@]}" up -d infisical-postgres infisical-redis
+until "${dc[@]}" exec -T infisical-postgres sh -c \
+  'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'; do sleep 2; done
+"${dc[@]}" exec -T infisical-postgres sh -c \
+  'pg_restore --clean --if-exists --no-owner -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+  < "$HOME/.local/state/fkit-bi-backups/infisical-latest.dump"
+"${dc[@]}" up -d infisical
+"${dc[@]}" exec -T infisical curl -fsS http://localhost:8080/api/status
+```
+
+Подключитесь к `127.0.0.1:18081` через SSH local-forward, войдите в восстановленную
+организацию и прочитайте canary. Используется тот же `INFISICAL_ENCRYPTION_KEY`;
+проверяйте значение только в UI, не копируя его в команду, терминал или журнал.
+После проверки вернитесь в исходную shell-сессию на сервере и остановите только
+временный проект, затем удалите его override-файл:
+
+```bash
+"${dc[@]}" down
+rm -f -- "$restore_override"
+```
+
+Не добавляйте `--volumes`; рабочий project и его volumes не трогайте. Защищённую
+копию ключа проверяйте вместе с backup.
+
+Для OIDC создайте отдельную machine identity на каждый репозиторий и добавьте её
+только в нужный project с ролью чтения секретов. Issuer и discovery URL должны
+быть `https://token.actions.githubusercontent.com`. Subject закрепите за
+конкретным репозиторием и `refs/heads/develop`; audience задайте как URL владельца
+репозитория GitHub. Дополнительными claims ограничьте `event_name=push` и
+`workflow_ref` соответствующим `.github/workflows/ci.yml@refs/heads/develop`.
+Проверьте точный формат subject через OIDC настройки репозитория: GitHub может
+использовать неизменяемые числовые ID в subject. Ограничьте project role только
+путём `/github-actions/<repo>` и храните там только значения, нужные deploy job.
+В GitHub Actions добавьте Variables `FKIT_BI_INFISICAL_IDENTITY_ID` и
+`FKIT_BI_INFISICAL_PROJECT_SLUG` в каждом repo. `id-token: write` выдаётся только
+deploy job после publish; PR и verify jobs не получают Infisical identity.
+Оставьте пользовательский `FKIT_BI_GITHUB_TOKEN` в GitHub для приватных checkout.
+Action закреплён на проверенном commit SHA для v1.0.9. Обновляйте его только после
+отдельного просмотра release, подписи commit и полного SHA, затем проверяйте workflow.
+
+Infra deploy получает `FKIT_BI_DEV_POSTGRES_PASSWORD`,
+`FKIT_BI_DEV_JWT_SECRET` и `FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD` из Infisical,
+сохраняет их в приватном `.env` с режимом `0600` и перезапускает зависимые
+приложения. Deploy не выполняет `ALTER ROLE`, сброс пароля Grafana или смену
+паролей учётных записей Analytics. При смене пароля оператор сначала меняет его
+в целевой системе, затем записывает то же значение в Infisical и запускает
+delivery/restart. Изменение JWT ключа отзывает существующие сессии, поэтому
+синхронизируйте его в Infisical и выполняйте delivery только после согласованного
+изменения.
 
 По умолчанию `TLS_MODE=off`: Nginx принимает HTTP на 80, TLS listener не создаётся,
 Certbot не обращается к DNS. `TLS_MODE=self-signed` создаёт certificate/key в
@@ -177,9 +304,9 @@ docker compose exec -T proxy openssl x509 \
 При ненулевом коде проверьте логи renewal helper и повторите renewal до истечения
 сертификата.
 
-Задайте `FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD` как GitHub Actions secret;
-bootstrap заменяет известный placeholder в private `.env` и проверяет значение
-до старта Compose.
+Задайте `FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD` в Infisical до первого запуска;
+delivery проверит формат и запишет его в private `.env`, не меняя пароль в уже
+инициализированном Grafana.
 Grafana публикуется только на `127.0.0.1:${GRAFANA_PORT:-3000}`; подключайтесь через
 SSH tunnel. Prometheus и exporters доступны только внутри Compose network. Compose
 provisioning создаёт datasource, шесть dashboards и alert rules. Остановка

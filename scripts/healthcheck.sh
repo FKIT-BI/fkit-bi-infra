@@ -1,26 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
-if (( $# != 1 && $# != 3 )); then
-  echo 'usage: healthcheck.sh <public-url> [<analytics-url> <generator-url>]' >&2
+if (( $# == 0 )); then
+  echo 'usage: healthcheck.sh <public-url> [<additional-health-url> ...]' >&2
   exit 2
 fi
 
 url="$1"
 url="${url%/}"
-if (( $# == 3 )); then
-  urls=(
-    "$url/"
-    "$url/api/analytics/actuator/health"
-    "$url/api/generator/actuator/health"
-    "$2"
-    "$3"
-  )
-else
-  urls=(
-    "$url/"
-    "$url/api/analytics/actuator/health"
-    "$url/api/generator/actuator/health"
-  )
+urls=("$url/" "$url/api/analytics/actuator/health" "$url/api/generator/actuator/health")
+if (( $# >= 2 )); then
+  shift
+  urls+=("$@")
 fi
 body_file="$(mktemp)"
 trap 'rm -f "$body_file"' EXIT

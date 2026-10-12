@@ -58,7 +58,7 @@ for expected in (
     "--manual --preferred-challenges dns",
     "--manual-auth-hook python3 /opt/fkit/certbot/yandex_dns.py auth",
     "--manual-cleanup-hook python3 /opt/fkit/certbot/yandex_dns.py cleanup",
-    "--cert-name bi.kitexp.ru -d bi.kitexp.ru -d *.bi.kitexp.ru",
+    "--cert-name bi.kitexp.ru -d bi.kitexp.ru -d *.bi.kitexp.ru -d secrets.kitexp.ru",
 ):
     assert expected in command, command
 
@@ -70,7 +70,7 @@ assert http_success.returncode == 0, http_success.stderr
 for expected in (
     "certonly --non-interactive --agree-tos --email operator@example.test",
     "--webroot --webroot-path ",
-    "--cert-name bi.kitexp.ru -d bi.kitexp.ru -d api.bi.kitexp.ru -d generator.bi.kitexp.ru",
+    "--cert-name bi.kitexp.ru -d bi.kitexp.ru -d api.bi.kitexp.ru -d generator.bi.kitexp.ru -d secrets.kitexp.ru",
 ):
     assert expected in http_command, http_command
 assert "/webroot --preferred-challenges http" in http_command, http_command
