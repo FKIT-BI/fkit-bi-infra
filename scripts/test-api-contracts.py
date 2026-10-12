@@ -27,7 +27,7 @@ CONTRACTS = (
 )
 EXPECTED_OPERATION_COUNTS = {
     "auth-api.yaml": 2,
-    "analytics-api-draft.yaml": 65,
+    "analytics-api-draft.yaml": 67,
     "draft-api.yaml": 28,
     "generator-api-draft.yaml": 12,
 }
