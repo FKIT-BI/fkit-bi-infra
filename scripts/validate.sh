@@ -6,6 +6,7 @@ for tls_mode in off self-signed public; do
   TLS_MODE="$tls_mode" docker compose --env-file .env.example config --quiet
 done
 python3 scripts/test-runtime-contracts.py
+./scripts/test-bootstrap-commands.sh
 python3 scripts/test-api-contracts.py
 python3 scripts/test-edge-http.py
 python3 certbot/test_renew.py
