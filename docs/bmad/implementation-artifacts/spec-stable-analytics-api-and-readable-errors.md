@@ -78,6 +78,8 @@ context:
 
 ## Spec Change Log
 
+- Итерация 2 (retest HAR): шторм `GET incidents` из формы «Ещё идёт» (Date.now() в ключе запроса) и 422 `INVALID_INCIDENT_RANGE` из-за потери миллисекунд `coverageFrom` в `toIso`. Правила времени инцидента не изменены; ошибки инцидента получили поля, причины и `details` границ, форма Web зеркалит правила backend.
+
 ## Review Triage Log
 
 - [fixed] Ready boundary по `min(data_through)` ломала «Сегодня» для предприятия с отстающей машиной и давала 404 для пустой области.
