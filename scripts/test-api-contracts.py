@@ -29,7 +29,7 @@ EXPECTED_OPERATION_COUNTS = {
     "auth-api.yaml": 2,
     "analytics-api-draft.yaml": 68,
     "draft-api.yaml": 28,
-    "generator-api-draft.yaml": 12,
+    "generator-api-draft.yaml": 13,
 }
 METHODS = {"get", "put", "post", "delete", "patch", "options", "head", "trace"}
 
