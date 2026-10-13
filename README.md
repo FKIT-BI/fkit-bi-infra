@@ -2,7 +2,7 @@
 
 Infrastructure repository for PostgreSQL, analytics, generator, web and nginx. Analytics owns the shared database migrations.
 
-Copy `.env.example` to `.env` only on the Dev host. Run `./scripts/validate.sh` to validate Compose and scripts. Read `docs/architecture/`, `docs/development.md`, `docs/dev-deployment.md` and `docs/bmad/project-context.md` before changing shared contracts.
+Copy `.env.example` to `.env` only on the Dev host. Run `./scripts/validate.sh` to validate Compose and scripts. Demo data and the demo walkthrough: `docs/demo.md`. Read `docs/architecture/`, `docs/development.md`, `docs/dev-deployment.md` and `docs/bmad/project-context.md` before changing shared contracts.
 
 Создайте `FKIT_JWT_SECRET` минимум из 32 криптографически случайных байт, закодируйте Base64 и передайте его обоим сервисам через deployment environment.
 

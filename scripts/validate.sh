@@ -9,6 +9,8 @@ python3 scripts/test-runtime-contracts.py
 ./scripts/test-bootstrap-commands.sh
 python3 scripts/test-api-contracts.py
 python3 scripts/test-edge-http.py
+python3 -m py_compile scripts/demo_generate.py
+python3 scripts/demo_generate.py --help >/dev/null
 python3 certbot/test_renew.py
 python3 certbot/test_setup.py
 ./scripts/test-delivery.sh
