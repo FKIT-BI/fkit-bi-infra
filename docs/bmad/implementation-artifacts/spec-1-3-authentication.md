@@ -63,6 +63,38 @@ context:
 - Given валидный/невалидный/истёкший JWT, when клиент обращается к любому business API Analytics или Generator, then оба сервиса согласованно принимают/отклоняют его, сохраняя доступность health probes.
 - Given чистая и существующая БД, when Testcontainers применяет миграции, then все прежние foundation/legacy данные сохранены, а повторная миграция идемпотентна.
 
+### Review Findings
+
+- [ ] [Review][Decision] Определить единую семантику строковых полей Auth — Нормативный OpenAPI и runtime расходятся: `@NotBlank` и trim отклоняют/изменяют пробельные значения, Java `@Size`/`String.length()` считают UTF-16 units вместо JSON Schema code points, а login дополнительно вводит отсутствующий в контракте лимит 72 UTF-8 bytes. Нужно выбрать: буквально привести реализацию к OpenAPI либо согласованно уточнить human-owned контракт и затем синхронизировать валидаторы.
+- [ ] [Review][Decision] Решить, обязателен ли Ports-and-Adapters для Auth — `AuthService` и `BootstrapUserCommand` содержат JDBC/SQL непосредственно в application flow, хотя Epic 1 context требует независимости application logic от HTTP/JDBC adapters. Требуется либо вынести identity persistence в repository port/adapter, либо явно принять локальное архитектурное исключение.
+- [ ] [Review][Patch] Отклонять неизвестные JSON-поля в Auth DTO согласно `additionalProperties: false` [fkit-bi-analytics/src/main/java/ru/fkit/bi/analytics/auth/AuthDtos.java:13]
+- [ ] [Review][Patch] Применять rate limit до parsing/validation и только после bootstrap-authorization для create-user [fkit-bi-analytics/src/main/java/ru/fkit/bi/analytics/auth/AuthController.java:39]
+- [ ] [Review][Patch] Изолировать bounded cardinality login/create limiters и убрать синхронный O(n) scan, добавив проверки capacity/reclamation [fkit-bi-analytics/src/main/java/ru/fkit/bi/analytics/auth/RateLimiter.java:10]
+- [ ] [Review][Patch] Добавлять стандартный `WWW-Authenticate: Bearer` в resource-server ответы 401 обоих сервисов [fkit-bi-analytics/src/main/java/ru/fkit/bi/analytics/auth/AuthSecurityConfiguration.java:116]
+- [ ] [Review][Patch] Логировать диагностируемую причину unexpected 500 вместе с traceId без payload/secrets [fkit-bi-analytics/src/main/java/ru/fkit/bi/analytics/api/ApiExceptionHandler.java:103]
+- [ ] [Review][Patch] Не публиковать `/actuator/info` анонимно через внешний proxy [fkit-bi-analytics/src/main/java/ru/fkit/bi/analytics/auth/AuthSecurityConfiguration.java:103]
+- [ ] [Review][Patch] Сделать rate-limit тесты детерминированными на границе минуты [fkit-bi-analytics/src/test/java/ru/fkit/bi/analytics/auth/AuthFlowTest.java:239]
+- [ ] [Review][Patch] Проверить BCrypt storage и успешный login для bootstrap/API-created accounts [fkit-bi-analytics/src/test/java/ru/fkit/bi/analytics/auth/AuthFlowTest.java:71]
+- [ ] [Review][Patch] Зафиксировать контрактный 403 для валидного JWT с отсутствующим DB actor [fkit-bi-analytics/src/test/java/ru/fkit/bi/analytics/auth/AuthFlowTest.java:200]
+- [ ] [Review][Patch] Требовать канонический UUID subject и покрыть malformed/non-canonical `sub` в обоих resource servers [fkit-bi-analytics/src/main/java/ru/fkit/bi/analytics/auth/AuthSecurityConfiguration.java:71]
+- [ ] [Review][Patch] Покрыть fail-fast для blank/malformed/short JWT secret в обоих сервисах [fkit-bi-analytics/src/main/java/ru/fkit/bi/analytics/auth/AuthSecurityConfiguration.java:49]
+- [ ] [Review][Patch] Добавить конкурентный Testcontainers-тест двух bootstrap attempts [fkit-bi-analytics/src/test/java/ru/fkit/bi/analytics/auth/AuthFlowTest.java:71]
+- [ ] [Review][Patch] Ограничить ожидание bootstrap advisory lock [fkit-bi-analytics/src/main/java/ru/fkit/bi/analytics/auth/BootstrapUserCommand.java:60]
+- [ ] [Review][Patch] Писать `bootstrap_user created=true` только после успешного commit [fkit-bi-analytics/src/main/java/ru/fkit/bi/analytics/auth/BootstrapUserCommand.java:77]
+- [ ] [Review][Patch] Не позволять внешней конфигурации бесшумно отключать явную CLI-команду `bootstrap-user` [fkit-bi-analytics/src/main/java/ru/fkit/bi/analytics/AnalyticsApplication.java:15]
+- [ ] [Review][Patch] Определять login validation status независимо от servlet context path [fkit-bi-analytics/src/main/java/ru/fkit/bi/analytics/api/ApiExceptionHandler.java:35]
+- [ ] [Review][Patch] Не выдавать новое fixed-window allowance при переводе системных часов назад [fkit-bi-analytics/src/main/java/ru/fkit/bi/analytics/auth/RateLimiter.java:13]
+- [x] [Review][Defer] Устранить противоречие security context о bearer для «каждой публичной операции» при публичных login/probes [fkit-bi-infra/docs/bmad/specs/spec-security-audit/SPEC.md:18] — deferred: изменение загруженного planning/context spec вынесено из code patch.
+- [x] [Review][Defer] Актуализировать security deployment doc: удалить устаревший `PUBLIC_PORT` и описать `TLS_MODE=off` [fkit-bi-infra/docs/bmad/specs/spec-security-audit/security-and-deployment.md:20] — deferred: изменение загруженного planning/context spec вынесено из code patch.
+
+#### Rejected
+
+- `false` — Bootstrap-команда, обнаружив любую существующую учётную запись, обязана завершаться no-op: это прямо зафиксировано в Story 1.3; отсутствие bootstrap row после ручного вмешательства не доказывает дефект этого пути.
+- `false` — Удаление/replacement bootstrap row возможно только через прямой привилегированный доступ к БД; в проверяемой реализации нет user-delete API или вызывающего кода, поэтому заявленный runtime outcome не достижим.
+- `false` — Нулевая clock skew для JWT соответствует явному требованию отклонять future `iat`; изменение tolerance без смены контракта нарушило бы утверждённое намерение.
+- `false` — Analytics не создаёт framework exception с нестандартным HTTP-кодом; потенциальный `HttpStatus.valueOf` failure не показан достижимым в проверяемом control flow.
+- `false` — Generator не создаёт framework exception с нестандартным HTTP-кодом; потенциальный `HttpStatus.valueOf` failure не показан достижимым в проверяемом control flow.
+
 ## Implementation Notes
 
 Планировочное решение: выделить `identity` как шестую логическую схему вместо размещения пользователей в `equipment`; это сохраняет границу доменов. Совместимый release меняется на `002-authentication`, иначе Generator не сможет распознать добавленную схему. Ограничение rate limit реализовать простым локальным механизмом для текущего single-instance MVP с явно документированным reset при перезапуске; не добавлять новую БД/распределённую очередь. Bootstrap-команду запускать в non-web режиме с credentials из deployment environment и безопасным no-op, если пользовательский store уже инициализирован.

@@ -19,6 +19,18 @@
 - source_spec: none
   summary: Story 1.5 «Backup and restore operations» отложена до отдельного решения о сроках резервного копирования.
   evidence: Пользователь попросил пока отложить резервное копирование и продолжить дальнейшие работы; ежедневные dumps, retention, age monitoring и restore drill не входят в текущую итерацию.
+
+## Deferred from: code review of spec-1-3-authentication.md (2026-10-12)
+
+- Привести `spec-security-audit/SPEC.md` к фактической auth boundary: login и необходимые health probes являются явно публичными исключениями, поэтому формулировка «каждая публичная операция требует Bearer» противоречива.
+- Актуализировать `spec-security-audit/security-and-deployment.md`: удалить устаревший `PUBLIC_PORT` и описать реально поддерживаемый `TLS_MODE=off|self-signed|public`.
+
+## Deferred from: code review of spec-public-swagger-for-backend-services.md (2026-10-12)
+
+- source_spec: `fkit-bi-infra/docs/bmad/implementation-artifacts/spec-public-swagger-for-backend-services.md`
+  summary: Выяснить и устранить сбой `AuthFlowTest.loginLimiterReturnsRetryAfterAndDoesNotTrustUnconfiguredForwardingHeaders` в Analytics.
+  evidence: Полный `./mvnw verify` в этой story воспроизводимо получил 401 вместо ожидаемого 429 на одиннадцатом запросе. Swagger allowlist не меняет маршрутизацию `/api/v1/auth/login`; повтор полного теста на исходном baseline установит, является ли сбой предсуществующим или регрессией.
+
 # Epic 4 review follow-ups
 - source_spec: `fkit-bi-infra/docs/bmad/implementation-artifacts/spec-epic-4-historical-projections-and-query-api.md`
   summary: Проверить fallback gaps для timeline, где присутствует только часть effective state intervals.
@@ -32,3 +44,6 @@
 - source_spec: `fkit-bi-infra/docs/bmad/implementation-artifacts/spec-publish-dev-delivery.md`
   summary: Подтвердить поведение Yandex DNS при operation timeout и исключить гонку завершения операции с Certbot cleanup.
   evidence: Hook завершает polling через 60 секунд, но без подтверждённой гарантии отмены/завершения от Yandex API нельзя установить, может ли update завершиться позже и пересечься с cleanup; проверить на delayed-operation mock или в отдельной безопасной зоне.
+- source_spec: `fkit-bi-infra/docs/bmad/implementation-artifacts/spec-demo-admin-onboarding.md`
+  summary: Проверить публичность Analytics `/actuator/info` через внешний Nginx и ограничить маршрут, если он доступен извне.
+  evidence: AuthSecurityConfiguration разрешает анонимный `/actuator/info`; Nginx явно блокирует публичный Prometheus, но не содержит аналогичного правила для info. Это поведение существовало до текущей реализации.
