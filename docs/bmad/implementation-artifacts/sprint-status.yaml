@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-10-2026 20:45
-last_updated: 15-10-2026 13:10
+last_updated: 15-10-2026 16:40
 project: fkit-bi
 project_key: NOKEY
 tracking_system: file-system
@@ -94,10 +94,10 @@ development_status:
 
   # Онбординг в web (spec-web-onboarding-wizard.md)
   epic-web-onboarding: in-progress
-  web-006-dictionaries-and-help: review
-  web-007-auto-codes: review
-  web-008-signal-templates: backlog
-  web-009-state-rule-builder: backlog
-  web-010-onboarding-wizard: backlog
-  web-011-admin-integration: backlog
+  web-006-dictionaries-and-help: done
+  web-007-auto-codes: done
+  web-008-signal-templates: review
+  web-009-state-rule-builder: review
+  web-010-onboarding-wizard: review
+  web-011-admin-integration: review
   epic-web-onboarding-retrospective: optional
