@@ -121,7 +121,8 @@ summary доставки. На сервере для диагностики ис
 `docker compose logs --tail=100 <service>`. Не публикуйте содержимое `.env` и
 не удаляйте volume командой `docker compose down -v`.
 
-Grafana доступна через SSH-туннель, а не напрямую из Интернета:
+Grafana доступна по <https://grafana.bi.kitexp.ru/> через Nginx. Резервный вариант —
+SSH-туннель:
 
 ```bash
 ssh -L 3000:127.0.0.1:3000 -p "$FKIT_BI_DEV_SSH_PORT" \

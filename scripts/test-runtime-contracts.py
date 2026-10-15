@@ -64,7 +64,12 @@ for text in (nginx, tls):
         assert f"location ^~ /api/{service}/actuator/prometheus {{ return 404; }}" in text
     assert "proxy_set_header Authorization $http_authorization;" in text
     assert "proxy_set_header X-Trace-Id $http_x_trace_id;" in text
-assert "server_name bi.kitexp.ru api.bi.kitexp.ru generator.bi.kitexp.ru secrets.kitexp.ru;" in tls
+assert "server_name bi.kitexp.ru api.bi.kitexp.ru generator.bi.kitexp.ru grafana.bi.kitexp.ru secrets.kitexp.ru;" in tls
+assert "server_name grafana.bi.kitexp.ru;" in tls
+assert "set $grafana_upstream grafana:3000;" in tls
+assert "proxy_pass http://$grafana_upstream;" in tls
+assert "grafana" not in nginx, "Grafana is published only through the TLS listener"
+assert services["grafana"]["environment"]["GF_SERVER_ROOT_URL"] == "https://grafana.bi.kitexp.ru/"
 assert "server_name secrets.kitexp.ru;" in tls
 assert "set $infisical_upstream infisical:8080;" in tls
 assert "proxy_pass http://$infisical_upstream;" in tls

@@ -69,7 +69,8 @@ case "$mode" in
         certbot certonly --non-interactive --agree-tos --email "$CERTBOT_EMAIL" \
           --webroot --webroot-path "$webroot" --preferred-challenges http \
           --cert-name bi.kitexp.ru \
-          -d bi.kitexp.ru -d api.bi.kitexp.ru -d generator.bi.kitexp.ru -d secrets.kitexp.ru
+          -d bi.kitexp.ru -d api.bi.kitexp.ru -d generator.bi.kitexp.ru \
+          -d grafana.bi.kitexp.ru -d secrets.kitexp.ru
         ;;
       dns-01)
         : "${DNS_ZONE_ID:?DNS_ZONE_ID is required for public DNS-01}"

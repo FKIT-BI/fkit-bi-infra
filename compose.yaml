@@ -182,6 +182,8 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_DOMAIN: ${GRAFANA_DOMAIN:-grafana.bi.kitexp.ru}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-https://grafana.bi.kitexp.ru/}
     ports: ["127.0.0.1:${GRAFANA_PORT:-3000}:3000"]
     volumes:
       - grafana-data:/var/lib/grafana

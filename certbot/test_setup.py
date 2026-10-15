@@ -70,7 +70,8 @@ assert http_success.returncode == 0, http_success.stderr
 for expected in (
     "certonly --non-interactive --agree-tos --email operator@example.test",
     "--webroot --webroot-path ",
-    "--cert-name bi.kitexp.ru -d bi.kitexp.ru -d api.bi.kitexp.ru -d generator.bi.kitexp.ru -d secrets.kitexp.ru",
+    "--cert-name bi.kitexp.ru -d bi.kitexp.ru -d api.bi.kitexp.ru -d generator.bi.kitexp.ru",
+    "-d grafana.bi.kitexp.ru -d secrets.kitexp.ru",
 ):
     assert expected in http_command, http_command
 assert "/webroot --preferred-challenges http" in http_command, http_command

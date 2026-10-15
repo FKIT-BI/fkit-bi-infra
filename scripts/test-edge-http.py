@@ -86,6 +86,7 @@ server {
 }
 server { listen 18083; return 200 'web'; }
 server { listen 18084; return 200 'infisical'; }
+server { listen 18085; return 200 'grafana $http_x_forwarded_proto'; }
 """
         (conf_dir / "default.conf").write_text(http_conf)
         tls_template = temp / "tls.conf.template"
@@ -94,6 +95,7 @@ server { listen 18084; return 200 'infisical'; }
         tls_conf = tls_conf.replace("generator:8080", "127.0.0.1:18082")
         tls_conf = tls_conf.replace("web:80", "127.0.0.1:18083")
         tls_conf = tls_conf.replace("infisical:8080", "127.0.0.1:18084")
+        tls_conf = tls_conf.replace("grafana:3000", "127.0.0.1:18085")
         tls_template.write_text(tls_conf)
 
         docker("run", "-d", "--name", container,
@@ -101,6 +103,7 @@ server { listen 18084; return 200 'infisical'; }
                "--add-host", "bi.kitexp.ru:127.0.0.1",
                "--add-host", "api.bi.kitexp.ru:127.0.0.1",
                "--add-host", "generator.bi.kitexp.ru:127.0.0.1",
+               "--add-host", "grafana.bi.kitexp.ru:127.0.0.1",
                "--add-host", "secrets.kitexp.ru:127.0.0.1",
                "-v", f"{conf_dir}:/etc/nginx/conf.d",
                "-v", f"{tls_template}:/etc/nginx/tls.conf.template:ro",
@@ -151,6 +154,10 @@ server { listen 18084; return 200 'infisical'; }
                 assert web.returncode == 0 and web.stdout == "web", (web.stdout, web.stderr)
                 infisical = request(container, "https://127.0.0.1/", "secrets.kitexp.ru", tls=True)
                 assert infisical.returncode == 0 and "infisical" in infisical.stdout
+                grafana = request(container, "https://127.0.0.1/login", "grafana.bi.kitexp.ru", tls=True)
+                assert grafana.returncode == 0 and grafana.stdout == "grafana https", (grafana.stdout, grafana.stderr)
+                grafana_redirect = request(container, "http://127.0.0.1/login", "grafana.bi.kitexp.ru")
+                assert "Location: https://grafana.bi.kitexp.ru/login" in grafana_redirect.stderr, grafana_redirect.stderr
 
                 for host in ("api.bi.kitexp.ru", "generator.bi.kitexp.ru"):
                     for path in ("/actuator/prometheus", "/actuator/prometheus/"):

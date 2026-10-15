@@ -307,8 +307,10 @@ docker compose exec -T proxy openssl x509 \
 Задайте `FKIT_BI_DEV_GRAFANA_ADMIN_PASSWORD` в Infisical до первого запуска;
 delivery проверит формат и запишет его в private `.env`, не меняя пароль в уже
 инициализированном Grafana.
-Grafana публикуется только на `127.0.0.1:${GRAFANA_PORT:-3000}`; подключайтесь через
-SSH tunnel. Prometheus и exporters доступны только внутри Compose network. Compose
+Grafana доступна по <https://grafana.bi.kitexp.ru/> (A-запись `grafana.bi` →
+`45.132.176.28`, сертификат перевыпускается delivery с этим SAN). Host port остаётся
+только на `127.0.0.1:${GRAFANA_PORT:-3000}` для SSH tunnel; в `TLS_MODE=off` и по IP
+Grafana не маршрутизируется. Prometheus и exporters доступны только внутри Compose network. Compose
 provisioning создаёт datasource, шесть dashboards и alert rules. Остановка
 Prometheus или Grafana не является readiness-зависимостью Analytics/Generator.
 
